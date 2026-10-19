@@ -67,12 +67,14 @@ summary{padding:8px 12px; cursor:pointer; font-size:13px; color:var(--sub)}
 .stage{flex:1; min-height:0; background:var(--stage); overflow:auto; padding:8px; position:relative}
 .holder{margin:0 auto; overflow:hidden; background:#fff; box-shadow:0 2px 14px rgba(0,0,0,.25); border-radius:6px}
 iframe{border:0; display:block; background:#fff; width:100%}
-.ovwrap,.cap#cap2{display:none}
-body[data-two="1"] .ovwrap{display:block; flex:0 0 auto; background:var(--stage); border-bottom:1px solid var(--line)}
-body[data-two="1"] .cap#cap2{display:block}
+.previewpane{position:relative}
+.cap#cap2{display:block}
+.ovwrap{display:none; position:absolute; top:34px; right:24px; z-index:5; background:var(--panel); border:1px solid var(--line); border-radius:10px; box-shadow:0 4px 18px rgba(0,0,0,.45); padding:3px}
+body[data-two="1"] .ovwrap{display:block}
 .cap{font-size:11.5px; color:var(--sub); padding:4px 12px; background:var(--panel); border-bottom:1px solid var(--line); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
-.ovstage{padding:8px 8px 10px; overflow:hidden}
-.ovholder{margin:0 auto; overflow:hidden; background:#fff; box-shadow:0 2px 14px rgba(0,0,0,.25); border-radius:6px}
+.ovwrap .cap{font-size:10.5px; padding:1px 6px 3px; border:0; cursor:pointer; text-align:center}
+.ovstage{padding:0; overflow:hidden}
+.ovholder{margin:0 auto; overflow:hidden; background:#fff; border-radius:6px}
 #ovframe{border:0; display:block; background:#fff; transform-origin:0 0}
 .chick{position:absolute; right:14px; bottom:10px; font-size:24px; opacity:.9; pointer-events:none; transform-origin:50% 100%}
 .chick.hop{animation:hop .6s ease}
@@ -110,7 +112,7 @@ body[data-two="1"] .cap#cap2{display:block}
     <button data-k="news" aria-pressed="false">お知らせ</button>
     <button data-k="work" aria-pressed="false">活動報告</button>
   </div>
-  <button class="btn" id="twoRow" title="大きいモニターの全体像を上に出して、2段で見る">2段にする</button>
+  <button class="btn" id="twoRow" title="大きいモニターの全体像を、右上に小さく重ねて出す・隠す">全体像を隠す</button>
   <button class="btn" id="hideEditor" title="コード欄を隠して、プレビューを広く見る">コード欄を隠す</button>
   <button class="btn" id="reload" title="CSSをキャッシュなしで読み込み直す">CSS再読込</button>
   <span class="spacer"></span>
@@ -144,8 +146,11 @@ body[data-two="1"] .cap#cap2{display:block}
         <label>追加CSS（サイトのhead内にあるインラインCSS。画像・段組みの見た目用）
           <textarea id="extra" spellcheck="false"></textarea>
         </label>
-        <label>全体像の幅（大きいモニターの横幅 px。2段表示の上段で使う）
+        <label>全体像の元の幅（大きいモニターの横幅 px）
           <input id="ovw" type="number" min="800" max="3840" step="10">
+        </label>
+        <label>ミニ全体像の大きさ（プレビュー枠の幅に対する %、10〜60）
+          <input id="miniPct" type="number" min="10" max="60" step="1">
         </label>
         <label>bodyのclass
           <input id="bodyclass" spellcheck="false">
@@ -276,8 +281,9 @@ body[data-two="1"] .cap#cap2{display:block}
     width: "fluid",
     hide: 0,
     wpify: 1,
-    two: 0,
-    ovw: 1920
+    two: 1,
+    ovw: 1920,
+    miniPct: 28
   };
 
   function $(id){ return document.getElementById(id); }
@@ -391,19 +397,23 @@ body[data-two="1"] .cap#cap2{display:block}
     $("info").textContent = "幅 " + w + "px ・ 100%" + note;
     $("cap2").textContent = "本来の見え方（この枠の幅 " + w + "px ・ 100%）" + note;
   }
+  var bigMini = false;
   function fitOverview(){
     if (!S.two) return;
-    var availW = Math.max(100, pp.clientWidth - 16);
     var W = Number(S.ovw) || 1920;
-    var sc = Math.min(1, availW / W);
-    var maxH = Math.max(140, pp.clientHeight * 0.45);
-    var H = Math.min(maxH, Math.round(availW * 9 / 16));
+    var pct = Math.min(60, Math.max(10, Number(S.miniPct) || 28));
+    var miniW = Math.min(420, Math.max(200, Math.round(pp.clientWidth * pct / 100)));
+    if (bigMini) miniW = Math.max(miniW, Math.min(pp.clientWidth - 60, Math.round(miniW * 2.2)));
+    miniW = Math.max(120, Math.min(miniW, pp.clientWidth - 48));
+    var sc = Math.min(1, miniW / W);
+    var maxH = Math.max(140, pp.clientHeight * 0.6);
+    var H = Math.min(maxH, Math.round(miniW * 0.75));
     ovholder.style.width = Math.round(W * sc) + "px";
     ovholder.style.height = H + "px";
     ovframe.style.width = W + "px";
     ovframe.style.height = Math.round(H / sc) + "px";
     ovframe.style.transform = "scale(" + sc + ")";
-    $("ovcap").textContent = "大きいモニターの全体像（幅 " + W + "px を " + Math.round(sc * 100) + "% に縮小）";
+    $("ovcap").textContent = "大画面 " + W + "px（" + Math.round(sc * 100) + "%）・タップで" + (bigMini ? "小さく" : "拡大");
   }
   function fit(){
     if (!pp.clientWidth) return;
@@ -435,6 +445,7 @@ body[data-two="1"] .cap#cap2{display:block}
     $("extra").value = S.extra;
     $("wpify").checked = !!S.wpify;
     $("ovw").value = S.ovw;
+    $("miniPct").value = S.miniPct;
     $("preset").value = S.preset;
     $("tpl").value = S.tpl;
   }
@@ -451,9 +462,11 @@ body[data-two="1"] .cap#cap2{display:block}
     $("base").addEventListener("input", function(){ S.base = this.value.trim(); save(); renderSoon(); });
     $("css").addEventListener("input", function(){ S.css = this.value; save(); renderSoon(); });
     $("ovw").addEventListener("input", function(){ var v = Number(this.value); if (v >= 800) { S.ovw = v; save(); fit(); } });
+    $("miniPct").addEventListener("input", function(){ var v = Number(this.value); if (v >= 10 && v <= 60) { S.miniPct = v; save(); fit(); } });
+    $("ovcap").addEventListener("click", function(){ bigMini = !bigMini; fit(); });
     function applyTwo(){
       document.body.dataset.two = S.two ? "1" : "0";
-      $("twoRow").textContent = S.two ? "1段に戻す" : "2段にする";
+      $("twoRow").textContent = S.two ? "全体像を隠す" : "全体像を出す";
       if (S.two) { ovframe.srcdoc = buildDoc(); }
       requestAnimationFrame(fit);
     }
