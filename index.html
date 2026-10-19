@@ -66,14 +66,19 @@ summary{padding:8px 12px; cursor:pointer; font-size:13px; color:var(--sub)}
 .note{font-size:11.5px; color:var(--sub); line-height:1.5}
 .stage{flex:1; min-height:0; background:var(--stage); overflow:auto; padding:8px; position:relative}
 .holder{margin:0 auto; overflow:hidden; background:#fff; box-shadow:0 2px 14px rgba(0,0,0,.25); border-radius:6px}
-iframe{border:0; display:block; background:#fff; transform-origin:0 0}
+iframe{border:0; display:block; background:#fff; width:100%}
 .chick{position:absolute; right:14px; bottom:10px; font-size:24px; opacity:.9; pointer-events:none; transform-origin:50% 100%}
 .chick.hop{animation:hop .6s ease}
 @keyframes hop{0%{transform:translateY(0) scale(1,1)}25%{transform:translateY(0) scale(1.15,.8)}55%{transform:translateY(-16px) scale(.95,1.1)}80%{transform:translateY(0) scale(1.1,.85)}100%{transform:translateY(0) scale(1,1)}}
 .chick::after{content:attr(data-say); position:absolute; right:30px; bottom:6px; white-space:nowrap; font-size:11px; background:var(--panel); color:var(--sub); border:1px solid var(--line); border-radius:999px; padding:2px 9px; opacity:0; transition:opacity .25s}
 .chick.hop::after{opacity:1}
 @media (prefers-reduced-motion: reduce){.chick.hop{animation:none}}
+@media (min-width:861px){
+  body[data-hide="1"] main{grid-template-columns:1fr}
+  body[data-hide="1"] .editor{display:none}
+}
 @media (max-width:860px){
+  #hideEditor{display:none}
   main{grid-template-columns:1fr; grid-template-rows:auto 1fr}
   .tabs{display:flex; background:var(--panel); border-bottom:1px solid var(--line)}
   .tabs button{flex:1; border:0; background:transparent; color:var(--sub); font:inherit; font-size:14px; padding:9px; cursor:pointer; border-bottom:3px solid transparent}
@@ -90,10 +95,11 @@ iframe{border:0; display:block; background:#fff; transform-origin:0 0}
 <header class="bar">
   <h1>ちら見くん 🐣</h1>
   <div class="seg" id="widths" role="group" aria-label="表示幅">
-    <button data-w="375" aria-pressed="true">スマホ</button>
+    <button data-w="fluid" aria-pressed="true">PC</button>
     <button data-w="768" aria-pressed="false">タブレット</button>
-    <button data-w="1200" aria-pressed="false">PC</button>
+    <button data-w="375" aria-pressed="false">スマホ</button>
   </div>
+  <button class="btn" id="hideEditor" title="コード欄を隠して、プレビューを広く見る">コード欄を隠す</button>
   <button class="btn" id="reload" title="CSSをキャッシュなしで読み込み直す">CSS再読込</button>
   <span class="spacer"></span>
   <span class="info" id="info"></span>
@@ -243,7 +249,8 @@ iframe{border:0; display:block; background:#fff; transform-origin:0 0}
     title: "サンプルのお知らせタイトル",
     extra: EXTRA_CSS,
     tpl: PRESETS.news.tpl,
-    width: 375
+    width: "fluid",
+    hide: 0
   };
 
   function $(id){ return document.getElementById(id); }
@@ -252,6 +259,8 @@ iframe{border:0; display:block; background:#fff; transform-origin:0 0}
     var saved = {};
     try { saved = JSON.parse(localStorage.getItem(KEY) || "{}") || {}; } catch(e){}
     for (var k in DEFAULTS) S[k] = (saved[k] !== undefined && saved[k] !== null) ? saved[k] : DEFAULTS[k];
+    S.width = String(S.width);
+    if (S.width !== "fluid" && S.width !== "768" && S.width !== "375") S.width = "fluid";
   }
   function save(){
     try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e){}
@@ -260,9 +269,15 @@ iframe{border:0; display:block; background:#fff; transform-origin:0 0}
   var bust = "";
   function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;"); }
 
+  var fullPage = false;
   function bodyOf(src){
     var m = /<body[^>]*>([\s\S]*)<\/body>/i.exec(src);
     return m ? m[1] : src;
+  }
+  function isFullPage(src){ return /<body[\s>]/i.test(src) || /<main[\s>]/i.test(src); }
+  function bodyClassOf(src){
+    var m = /<body[^>]*\sclass=["']([^"']*)["']/i.exec(src);
+    return m ? m[1] : "";
   }
 
   function buildDoc(){
@@ -274,11 +289,14 @@ iframe{border:0; display:block; background:#fff; transform-origin:0 0}
     var tpl = S.tpl.indexOf("{{CONTENT}}") >= 0 ? S.tpl : S.tpl + "\n{{CONTENT}}";
     var ttl = String(S.title || "").replace(/&/g,"&amp;").replace(/</g,"&lt;");
     var inner = tpl.split("{{TITLE}}").join(ttl).split("{{CONTENT}}").join(content);
+    var bcls = S.bodyclass;
+    fullPage = isFullPage(S.code);
+    if (fullPage) { inner = content; bcls = bodyClassOf(S.code) || S.bodyclass; }
     var base = S.base ? '<base href="' + esc(S.base) + '" target="_blank">' : "";
     return '<!doctype html><html lang="ja"><head><meta charset="utf-8">' +
       '<meta name="viewport" content="width=device-width">' + base + links +
       (S.extra ? '<style>' + String(S.extra).replace(/<\/style/gi, "") + '</style>' : "") +
-      '</head><body class="' + esc(S.bodyclass) + '">' + inner + '</body></html>';
+      '</head><body class="' + esc(bcls) + '">' + inner + '</body></html>';
   }
 
   var frame = $("frame"), holder = $("holder"), stage = $("stage");
@@ -293,6 +311,7 @@ iframe{border:0; display:block; background:#fff; transform-origin:0 0}
   var firstRender = true;
   function render(){
     frame.srcdoc = buildDoc();
+    updateInfo();
     if (firstRender) { firstRender = false; } else { hop(); }
   }
   function renderSoon(){
@@ -300,24 +319,25 @@ iframe{border:0; display:block; background:#fff; transform-origin:0 0}
     timer = setTimeout(render, 250);
   }
 
+  function updateInfo(){
+    var w = Math.round(holder.getBoundingClientRect().width);
+    $("info").textContent = "幅 " + w + "px ・ 100%" + (fullPage ? " ・ ページ全体として表示中（外枠は使っていません）" : "");
+  }
   function fit(){
-    var W = Number(S.width) || 375;
     if (!stage.clientWidth || !stage.clientHeight) return; // 非表示のタブでは計算しない
     var availW = Math.max(100, stage.clientWidth - 16);
     var availH = Math.max(100, stage.clientHeight - 16);
-    var s = Math.min(1, availW / W);
-    frame.style.width = W + "px";
-    frame.style.height = (availH / s) + "px";
-    frame.style.transform = "scale(" + s + ")";
-    holder.style.width = (W * s) + "px";
+    var fluid = (S.width === "fluid");
+    holder.style.width = fluid ? availW + "px" : (Number(S.width) || 375) + "px";
     holder.style.height = availH + "px";
-    $("info").textContent = W + "px ・ 表示 " + Math.round(s * 100) + "%";
+    frame.style.height = availH + "px";
+    updateInfo();
   }
 
   function setWidth(w){
-    S.width = w; save();
+    S.width = String(w); save();
     Array.prototype.forEach.call($("widths").querySelectorAll("button"), function(b){
-      b.setAttribute("aria-pressed", String(Number(b.dataset.w) === Number(w)));
+      b.setAttribute("aria-pressed", String(b.dataset.w === S.width));
     });
     fit();
   }
@@ -361,9 +381,16 @@ iframe{border:0; display:block; background:#fff; transform-origin:0 0}
 
     $("widths").addEventListener("click", function(e){
       var b = e.target.closest("button"); if (!b) return;
-      setWidth(Number(b.dataset.w));
+      setWidth(b.dataset.w);
       document.body.dataset.tab = "view"; syncTabs(); fit();
     });
+    function applyHide(){
+      document.body.dataset.hide = S.hide ? "1" : "0";
+      $("hideEditor").textContent = S.hide ? "コード欄を出す" : "コード欄を隠す";
+      requestAnimationFrame(fit);
+    }
+    $("hideEditor").addEventListener("click", function(){ S.hide = S.hide ? 0 : 1; save(); applyHide(); });
+    applyHide();
     $("reload").addEventListener("click", function(){ bust = String(Date.now()); render(); });
     $("reset").addEventListener("click", function(){
       if (!confirm("設定を初期値に戻します（貼ったHTMLはそのまま残ります）。よろしいですか？")) return;
