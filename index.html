@@ -72,8 +72,28 @@ iframe{border:0; display:block; background:#fff; width:100%}
 .ovwrap{display:none; position:absolute; top:34px; right:24px; z-index:5; background:var(--panel); border:1px solid var(--line); border-radius:10px; box-shadow:0 4px 18px rgba(0,0,0,.45); padding:3px}
 body[data-two="1"] .ovwrap{display:block}
 .cap{font-size:11.5px; color:var(--sub); padding:4px 12px; background:var(--panel); border-bottom:1px solid var(--line); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
-.ovwrap .cap{font-size:10.5px; padding:1px 6px 3px; border:0; cursor:pointer; text-align:center}
+.ovwrap .cap{font-size:10.5px; padding:2px 6px 3px; border:0; cursor:grab; text-align:center; touch-action:none; user-select:none; -webkit-user-select:none}
+.ovwrap .cap.dragging{cursor:grabbing}
+body.dragging-mini iframe{pointer-events:none}
 .ovstage{padding:0; overflow:hidden}
+.pageopts{display:flex; align-items:center; gap:6px; font-size:12px; color:var(--sub)}
+.pageopts[hidden]{display:none}
+.pageopts input,.pageopts select{border:1px solid var(--line); border-radius:999px; background:var(--code-bg); color:var(--ink); font:inherit; font-size:12px; padding:5px 10px}
+.pageopts input{width:11em}
+dialog.ckdlg{border:1px solid var(--line); border-radius:14px; background:var(--panel); color:var(--ink); width:min(640px,92vw); max-height:82vh; padding:0; font-family:inherit; overflow:hidden}
+dialog.ckdlg[open]{display:flex; flex-direction:column}
+dialog.ckdlg::backdrop{background:rgba(0,0,0,.5)}
+.ck-head{display:flex; align-items:center; gap:10px; padding:12px 16px}
+.ck-head b{font-size:15px; flex:1}
+.ck-sum{padding:0 16px 10px; font-size:13px; color:var(--sub)}
+.ck-list{overflow:auto; flex:1}
+.ck-item{border-top:1px solid var(--line); padding:10px 16px; font-size:13px; line-height:1.6}
+.ck-item .t{font-weight:700}
+.ck-item .d{color:var(--sub); font-size:12px}
+.ck-item ul{margin:4px 0 0; padding-left:1.3em; font-size:12px}
+.ck-item code{font-family:"BIZ UDGothic",monospace; background:var(--code-bg); border:1px solid var(--line); border-radius:4px; padding:0 4px; word-break:break-all}
+.ck-ok{padding:26px 16px; text-align:center; border-top:1px solid var(--line)}
+.ck-foot{border-top:1px solid var(--line); padding:8px 16px}
 .ovholder{margin:0 auto; overflow:hidden; background:#fff; border-radius:6px}
 #ovframe{border:0; display:block; background:#fff; transform-origin:0 0}
 .chick{position:absolute; right:14px; bottom:10px; font-size:24px; opacity:.9; pointer-events:none; transform-origin:50% 100%}
@@ -111,10 +131,18 @@ body[data-two="1"] .ovwrap{display:block}
   <div class="seg" id="kinds" role="group" aria-label="ページの種類">
     <button data-k="news" aria-pressed="false">お知らせ</button>
     <button data-k="work" aria-pressed="false">活動報告</button>
+    <button data-k="page" aria-pressed="false">固定ページ・その他</button>
   </div>
+  <span class="pageopts" id="pageOpts" hidden>
+    <label>ページ名 <input id="label" spellcheck="false" placeholder="例：臨床研修制度" title="ヘッダーの大きい文字とパンくずに入る"></label>
+    <label>サイドバー
+      <select id="side"><option value="none">なし</option><option value="news">お知らせ用</option><option value="work">活動報告用</option></select>
+    </label>
+  </span>
   <button class="btn" id="twoRow" title="大きいモニターの全体像を、右上に小さく重ねて出す・隠す">全体像を隠す</button>
   <button class="btn" id="hideEditor" title="コード欄を隠して、プレビューを広く見る">コード欄を隠す</button>
   <button class="btn" id="reload" title="CSSをキャッシュなしで読み込み直す">CSS再読込</button>
+  <button class="btn" id="precheck" title="貼ったHTMLを、公開前によくあるミスがないか調べる">公開前チェック</button>
   <span class="spacer"></span>
   <span class="info" id="info"></span>
 </header>
@@ -162,6 +190,7 @@ body[data-two="1"] .ovwrap{display:block}
           <textarea id="tpl" class="tall" spellcheck="false"></textarea>
         </label>
         <p class="note">お知らせ・活動報告の個別ページの外枠は、まだ実物を確認できていません。実際のページソースの &lt;main&gt; 付近を「自分で書く」に貼ると、より本物に近づきます。</p>
+        <button class="btn" id="resetMini">ミニ画面の位置を戻す</button>
         <button class="btn" id="reset">設定を初期値に戻す</button>
       </div>
     </details>
@@ -179,6 +208,13 @@ body[data-two="1"] .ovwrap{display:block}
     </div>
   </section>
 </main>
+
+<dialog class="ckdlg" id="ckdlg" aria-labelledby="cktitle">
+  <div class="ck-head"><b id="cktitle">公開前チェック 🐥</b><button class="btn" id="ckclose">閉じる</button></div>
+  <div class="ck-sum" id="cksum"></div>
+  <div class="ck-list" id="cklist"></div>
+  <div class="ck-foot note">貼ったコードの中身だけを見ています。サイトに載ったあとの見え方や、リンク先がちゃんと開くかまでは見ていません。</div>
+</dialog>
 
 <script>
 (function(){
@@ -241,12 +277,12 @@ body[data-two="1"] .ovwrap{display:block}
 '  <div class="main-header-wrap contents-wrap"><div class="main-header">\n' +
 '    <p class="breadcrumb"><span><span><a href="'+SITE+'/">HOME</a></span> ＞ <span><a href="'+listUrl+'">'+label+'</a></span> ＞ <span class="breadcrumb_last" aria-current="page">{{TITLE}}</span></span></p>\n' +
 '  </div></div>\n' +
-'  <div id="main-contents" class="main-contents two-column">\n' +
+'  <div id="main-contents" class="main-contents' + (sideHtml === false ? '' : ' two-column') + '">\n' +
 '    <section class="contents"><div class="contents">\n' +
 '      <h1 class="contents-title">{{TITLE}}</h1>\n' +
 '      <div class="contents-info">\n{{CONTENT}}\n      </div>\n' +
 '    </div></section>\n' +
-'    <div class="sidebar-wrap"><div id="sidebar" class="sidebar"><div class="main-header-topics">' + sideHtml + '</div></div></div>\n' +
+(sideHtml === false ? '' : '    <div class="sidebar-wrap"><div id="sidebar" class="sidebar"><div class="main-header-topics">' + sideHtml + '</div></div></div>\n') +
 '  </div>\n' +
 '</main>';
     return withHeaderFooter ? headerHtml(label) + '\n' + body + '\n' + FOOTER : body;
@@ -254,11 +290,19 @@ body[data-two="1"] .ovwrap{display:block}
 
   var NEWS_BODYCLASS = "wp-singular post-template-default single single-post single-format-standard wp-theme-doctor_yamanashi metaslider-plugin";
   var WORK_BODYCLASS = "wp-singular work_report-template-default single single-work_report wp-theme-doctor_yamanashi metaslider-plugin";
+  // 固定ページ・その他：ページ名は {{LABEL}}、サイドバーは設定で選ぶ（なし＝two-columnなし）
+  var PAGE_BODYCLASS = "page-template-default page wp-theme-doctor_yamanashi metaslider-plugin";
+  function pageTpl(withHeaderFooter){
+    var side = S.side === "news" ? SIDE_NEWS : (S.side === "work" ? SIDE_WORK : false);
+    return postTpl("{{LABEL}}", "#", side, withHeaderFooter);
+  }
   var PRESETS = {
     news: { label: "お知らせ（ページ全体）", bodyclass: NEWS_BODYCLASS, tpl: postTpl("お知らせ", SITE+"/category/news/", SIDE_NEWS, true) },
     newsbody: { label: "お知らせ（本文まわりだけ）", bodyclass: NEWS_BODYCLASS, tpl: postTpl("お知らせ", SITE+"/category/news/", SIDE_NEWS, false) },
     work: { label: "活動報告（ページ全体）", bodyclass: WORK_BODYCLASS, tpl: postTpl("活動報告", SITE+"/work_report/", SIDE_WORK, true) },
     workbody: { label: "活動報告（本文まわりだけ）", bodyclass: WORK_BODYCLASS, tpl: postTpl("活動報告", SITE+"/work_report/", SIDE_WORK, false) },
+    page: { label: "固定ページ・その他（ページ全体）", bodyclass: PAGE_BODYCLASS, get tpl(){ return pageTpl(true); } },
+    pagebody: { label: "固定ページ・その他（本文まわりだけ）", bodyclass: PAGE_BODYCLASS, get tpl(){ return pageTpl(false); } },
     none: { label: "枠なし（貼った内容のみ）", bodyclass: "wp-theme-doctor_yamanashi", tpl: "{{CONTENT}}" }
   };
   var EXTRA_CSS = "/* wp-block-library-inline-css */\n:root{--wp-block-synced-color:#7a00df;--wp-block-synced-color--rgb:122,0,223;--wp-bound-block-color:var(--wp-block-synced-color);--wp-editor-canvas-background:#ddd;--wp-admin-theme-color:#007cba;--wp-admin-theme-color--rgb:0,124,186;--wp-admin-theme-color-darker-10:#006ba1;--wp-admin-theme-color-darker-10--rgb:0,107,160.5;--wp-admin-theme-color-darker-20:#005a87;--wp-admin-theme-color-darker-20--rgb:0,90,135;--wp-admin-border-width-focus:2px}@media (min-resolution:192dpi){:root{--wp-admin-border-width-focus:1.5px}}.wp-element-button{cursor:pointer}:root .has-very-light-gray-background-color{background-color:#eee}:root .has-very-dark-gray-background-color{background-color:#313131}:root .has-very-light-gray-color{color:#eee}:root .has-very-dark-gray-color{color:#313131}:root .has-vivid-green-cyan-to-vivid-cyan-blue-gradient-background{background:linear-gradient(135deg,#00d084,#0693e3)}:root .has-purple-crush-gradient-background{background:linear-gradient(135deg,#34e2e4,#4721fb 50%,#ab1dfe)}:root .has-hazy-dawn-gradient-background{background:linear-gradient(135deg,#faaca8,#dad0ec)}:root .has-subdued-olive-gradient-background{background:linear-gradient(135deg,#fafae1,#67a671)}:root .has-atomic-cream-gradient-background{background:linear-gradient(135deg,#fdd79a,#004a59)}:root .has-nightshade-gradient-background{background:linear-gradient(135deg,#330968,#31cdcf)}:root .has-midnight-gradient-background{background:linear-gradient(135deg,#020381,#2874fc)}:root{--wp--preset--font-size--normal:16px;--wp--preset--font-size--huge:42px}.has-regular-font-size{font-size:1em}.has-larger-font-size{font-size:2.625em}.has-normal-font-size{font-size:var(--wp--preset--font-size--normal)}.has-huge-font-size{font-size:var(--wp--preset--font-size--huge)}:root .has-text-align-center{text-align:center}:root .has-text-align-left{text-align:left}:root .has-text-align-right{text-align:right}.has-fit-text{white-space:nowrap!important}#end-resizable-editor-section{display:none}.aligncenter{clear:both}.items-justified-left{justify-content:flex-start}.items-justified-center{justify-content:center}.items-justified-right{justify-content:flex-end}.items-justified-space-between{justify-content:space-between}.screen-reader-text{word-wrap:normal!important;border:0;clip-path:inset(50%);height:1px;margin:-1px;overflow:hidden;padding:0;position:absolute;width:1px;word-break:normal!important}.screen-reader-text:focus{background-color:#ddd;clip-path:none;color:#444;display:block;font-size:1em;height:auto;left:5px;line-height:normal;padding:15px 23px 14px;text-decoration:none;top:5px;width:auto;z-index:100000}html :where(.has-border-color){border-style:solid}html :where([style^=border-color],[style*=\";border-color\"],[style*=\"; border-color\"]){border-style:solid}html :where([style^=border-top-color],[style*=\";border-top-color\"],[style*=\"; border-top-color\"]){border-top-style:solid}html :where([style^=border-right-color],[style*=\";border-right-color\"],[style*=\"; border-right-color\"]){border-right-style:solid}html :where([style^=border-bottom-color],[style*=\";border-bottom-color\"],[style*=\"; border-bottom-color\"]){border-bottom-style:solid}html :where([style^=border-left-color],[style*=\";border-left-color\"],[style*=\"; border-left-color\"]){border-left-style:solid}html :where([style^=border-width],[style*=\";border-width\"],[style*=\"; border-width\"]){border-style:solid}html :where([style^=border-top-width],[style*=\";border-top-width\"],[style*=\"; border-top-width\"]){border-top-style:solid}html :where([style^=border-right-width],[style*=\";border-right-width\"],[style*=\"; border-right-width\"]){border-right-style:solid}html :where([style^=border-bottom-width],[style*=\";border-bottom-width\"],[style*=\"; border-bottom-width\"]){border-bottom-style:solid}html :where([style^=border-left-width],[style*=\";border-left-width\"],[style*=\"; border-left-width\"]){border-left-style:solid}html :where(img[class*=wp-image-]){height:auto;max-width:100%}:where(figure){margin:0 0 1em}html :where(.is-position-sticky){--wp-admin--admin-bar--position-offset:var(--wp-admin--admin-bar--height,0px)}@media screen and (max-width:600px){html :where(.is-position-sticky){--wp-admin--admin-bar--position-offset:0px}}\n\n/* classic-theme-styles-inline-css */\n/*! This file is auto-generated */\n.wp-block-button__link{color:#fff;background-color:#32373c;border-radius:9999px;box-shadow:none;text-decoration:none;padding:calc(.667em + 2px) calc(1.333em + 2px);font-size:1.125em}.wp-block-file__button{background:#32373c;color:#fff;text-decoration:none}\n\n/* wp-block-image-inline-css */\n.wp-block-image>a,.wp-block-image>figure>a{display:inline-block}.wp-block-image img{box-sizing:border-box;height:auto;max-width:100%;vertical-align:bottom}@media not (prefers-reduced-motion){.wp-block-image img.hide{visibility:hidden}.wp-block-image img.show{animation:show-content-image .4s}}.wp-block-image[style*=border-radius] img,.wp-block-image[style*=border-radius]>a{border-radius:inherit}.wp-block-image.has-custom-border img{box-sizing:border-box}.wp-block-image.aligncenter{text-align:center}.wp-block-image.alignfull>a,.wp-block-image.alignwide>a{width:100%}.wp-block-image.alignfull img,.wp-block-image.alignwide img{height:auto;width:100%}.wp-block-image .aligncenter,.wp-block-image .alignleft,.wp-block-image .alignright,.wp-block-image.aligncenter,.wp-block-image.alignleft,.wp-block-image.alignright{display:table}.wp-block-image .aligncenter>figcaption,.wp-block-image .alignleft>figcaption,.wp-block-image .alignright>figcaption,.wp-block-image.aligncenter>figcaption,.wp-block-image.alignleft>figcaption,.wp-block-image.alignright>figcaption{caption-side:bottom;display:table-caption}.wp-block-image .alignleft{float:left;margin:.5em 1em .5em 0}.wp-block-image .alignright{float:right;margin:.5em 0 .5em 1em}.wp-block-image .aligncenter{margin-left:auto;margin-right:auto}.wp-block-image :where(figcaption){margin-bottom:1em;margin-top:.5em}.wp-block-image.is-style-circle-mask img{border-radius:9999px}@supports ((-webkit-mask-image:none) or (mask-image:none)) or (-webkit-mask-image:none){.wp-block-image.is-style-circle-mask img{border-radius:0;-webkit-mask-image:url('data:image/svg+xml;utf8,<svg viewBox=\"0 0 100 100\" xmlns=\"http://www.w3.org/2000/svg\"><circle cx=\"50\" cy=\"50\" r=\"50\"/><\/svg>');mask-image:url('data:image/svg+xml;utf8,<svg viewBox=\"0 0 100 100\" xmlns=\"http://www.w3.org/2000/svg\"><circle cx=\"50\" cy=\"50\" r=\"50\"/><\/svg>');mask-mode:alpha;-webkit-mask-position:center;mask-position:center;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;-webkit-mask-size:contain;mask-size:contain}}:root :where(.wp-block-image.is-style-rounded img,.wp-block-image .is-style-rounded img){border-radius:9999px}.wp-block-image figure{margin:0}.wp-lightbox-container{display:flex;flex-direction:column;position:relative}.wp-lightbox-container img{cursor:zoom-in}.wp-lightbox-container img:hover+button{opacity:1}.wp-lightbox-container button{align-items:center;backdrop-filter:blur(16px) saturate(180%);background-color:rgba(90,90,90,.25);border:none;border-radius:4px;cursor:zoom-in;display:flex;height:20px;justify-content:center;opacity:0;padding:0;position:absolute;right:16px;text-align:center;top:16px;width:20px;z-index:100}@media not (prefers-reduced-motion){.wp-lightbox-container button{transition:opacity .2s ease}}.wp-lightbox-container button:focus-visible{outline:3px auto rgba(90,90,90,.25);outline:3px auto -webkit-focus-ring-color;outline-offset:3px}.wp-lightbox-container button:hover{cursor:pointer;opacity:1}.wp-lightbox-container button:focus{opacity:1}.wp-lightbox-container button:focus,.wp-lightbox-container button:hover,.wp-lightbox-container button:not(:hover):not(:active):not(.has-background){background-color:rgba(90,90,90,.25);border:none}.wp-lightbox-overlay{box-sizing:border-box;cursor:zoom-out;height:100vh;left:0;overflow:hidden;position:fixed;top:0;visibility:hidden;width:100%;z-index:100000}.wp-lightbox-overlay .wp-lightbox-close-button{align-items:center;cursor:pointer;display:flex;font-family:inherit;gap:8px;justify-content:center;line-height:1;min-height:40px;min-width:40px;padding:0 4px;position:absolute;right:calc(env(safe-area-inset-right) + 16px);top:calc(env(safe-area-inset-top) + 16px);z-index:5000000}.wp-lightbox-overlay .wp-lightbox-close-button:focus,.wp-lightbox-overlay .wp-lightbox-close-button:hover,.wp-lightbox-overlay .wp-lightbox-close-button:not(:hover):not(:active):not(.has-background){background:none;border:none}.wp-lightbox-overlay .wp-lightbox-close-button:has(.wp-lightbox-close-text:not([hidden])) .wp-lightbox-close-icon svg{height:1em;width:1em}.wp-lightbox-overlay .wp-lightbox-close-icon svg{display:block}.wp-lightbox-overlay .wp-lightbox-navigation-button-next,.wp-lightbox-overlay .wp-lightbox-navigation-button-prev{align-items:center;bottom:16px;cursor:pointer;display:flex;font-family:inherit;gap:4px;justify-content:center;line-height:1;min-height:40px;min-width:40px;padding:0 8px;position:absolute;z-index:2000002}.wp-lightbox-overlay .wp-lightbox-navigation-button-next[hidden],.wp-lightbox-overlay .wp-lightbox-navigation-button-prev[hidden]{display:none}@media (min-width:960px){.wp-lightbox-overlay .wp-lightbox-navigation-button-next,.wp-lightbox-overlay .wp-lightbox-navigation-button-prev{bottom:50%;transform:translateY(-50%)}}.wp-lightbox-overlay .wp-lightbox-navigation-button-next:focus,.wp-lightbox-overlay .wp-lightbox-navigation-button-next:hover,.wp-lightbox-overlay .wp-lightbox-navigation-button-next:not(:hover):not(:active):not(.has-background),.wp-lightbox-overlay .wp-lightbox-navigation-button-prev:focus,.wp-lightbox-overlay .wp-lightbox-navigation-button-prev:hover,.wp-lightbox-overlay .wp-lightbox-navigation-button-prev:not(:hover):not(:active):not(.has-background){background:none;border:none;padding:0 8px}.wp-lightbox-overlay .wp-lightbox-navigation-button-next:has(.wp-lightbox-navigation-text:not([hidden])) .wp-lightbox-navigation-icon svg,.wp-lightbox-overlay .wp-lightbox-navigation-button-prev:has(.wp-lightbox-navigation-text:not([hidden])) .wp-lightbox-navigation-icon svg{display:block;height:1.5em;width:1.5em}.wp-lightbox-overlay .wp-lightbox-navigation-button-prev{left:calc(env(safe-area-inset-left) + 16px)}.wp-lightbox-overlay .wp-lightbox-navigation-button-next{right:calc(env(safe-area-inset-right) + 16px)}.wp-lightbox-overlay .wp-lightbox-navigation-icon svg{vertical-align:middle}.wp-lightbox-overlay .lightbox-image-container{height:var(--wp--lightbox-container-height);left:50%;overflow:hidden;position:absolute;top:50%;transform:translate(-50%,-50%);transform-origin:top left;width:var(--wp--lightbox-container-width);z-index:2000001}.wp-lightbox-overlay .wp-block-image{align-items:center;box-sizing:border-box;display:flex;height:100%;justify-content:center;margin:0;position:relative;transform-origin:0 0;width:100%;z-index:3000000}.wp-lightbox-overlay .wp-block-image img{height:var(--wp--lightbox-image-height);min-height:var(--wp--lightbox-image-height);min-width:var(--wp--lightbox-image-width);width:var(--wp--lightbox-image-width)}.wp-lightbox-overlay .wp-block-image figcaption{display:none}.wp-lightbox-overlay button{background:none;border:none}.wp-lightbox-overlay .scrim{background-color:#fff;height:100%;opacity:.9;position:absolute;width:100%;z-index:2000000}.wp-lightbox-overlay.active{visibility:visible}@media not (prefers-reduced-motion){.wp-lightbox-overlay.active{animation:turn-on-visibility .25s both}.wp-lightbox-overlay.active img{animation:turn-on-visibility .35s both}.wp-lightbox-overlay.show-closing-animation:not(.active){animation:turn-off-visibility .35s both}.wp-lightbox-overlay.show-closing-animation:not(.active) img{animation:turn-off-visibility .25s both}.wp-lightbox-overlay.zoom.active{animation:none;opacity:1;visibility:visible}.wp-lightbox-overlay.zoom.active .lightbox-image-container{animation:lightbox-zoom-in .4s}.wp-lightbox-overlay.zoom.active .lightbox-image-container img{animation:none}.wp-lightbox-overlay.zoom.active .scrim{animation:turn-on-visibility .4s forwards}.wp-lightbox-overlay.zoom.show-closing-animation:not(.active){animation:none}.wp-lightbox-overlay.zoom.show-closing-animation:not(.active) .lightbox-image-container{animation:lightbox-zoom-out .4s}.wp-lightbox-overlay.zoom.show-closing-animation:not(.active) .lightbox-image-container img{animation:none}.wp-lightbox-overlay.zoom.show-closing-animation:not(.active) .scrim{animation:turn-off-visibility .4s forwards}}@keyframes show-content-image{0%{visibility:hidden}99%{visibility:hidden}to{visibility:visible}}@keyframes turn-on-visibility{0%{opacity:0}to{opacity:1}}@keyframes turn-off-visibility{0%{opacity:1;visibility:visible}99%{opacity:0;visibility:visible}to{opacity:0;visibility:hidden}}@keyframes lightbox-zoom-in{0%{transform:translate(calc((-100vw + var(--wp--lightbox-scrollbar-width))/2 + var(--wp--lightbox-initial-left-position)),calc(-50vh + var(--wp--lightbox-initial-top-position))) scale(var(--wp--lightbox-scale))}to{transform:translate(-50%,-50%) scale(1)}}@keyframes lightbox-zoom-out{0%{transform:translate(-50%,-50%) scale(1);visibility:visible}99%{visibility:visible}to{transform:translate(calc((-100vw + var(--wp--lightbox-scrollbar-width))/2 + var(--wp--lightbox-initial-left-position)),calc(-50vh + var(--wp--lightbox-initial-top-position))) scale(var(--wp--lightbox-scale));visibility:hidden}}\n\n/* wp-block-columns-inline-css */\n.wp-block-columns{box-sizing:border-box;display:flex;flex-wrap:wrap!important}@media (min-width:782px){.wp-block-columns{flex-wrap:nowrap!important}}.wp-block-columns{align-items:normal!important}.wp-block-columns.are-vertically-aligned-top{align-items:flex-start}.wp-block-columns.are-vertically-aligned-center{align-items:center}.wp-block-columns.are-vertically-aligned-bottom{align-items:flex-end}@media (max-width:781px){.wp-block-columns:not(.is-not-stacked-on-mobile)>.wp-block-column{flex-basis:100%!important}}@media (min-width:782px){.wp-block-columns:not(.is-not-stacked-on-mobile)>.wp-block-column{flex-basis:0;flex-grow:1}.wp-block-columns:not(.is-not-stacked-on-mobile)>.wp-block-column[style*=flex-basis]{flex-grow:0}}.wp-block-columns.is-not-stacked-on-mobile{flex-wrap:nowrap!important}.wp-block-columns.is-not-stacked-on-mobile>.wp-block-column{flex-basis:0;flex-grow:1}.wp-block-columns.is-not-stacked-on-mobile>.wp-block-column[style*=flex-basis]{flex-grow:0}:where(.wp-block-columns){margin-bottom:1.75em}:where(.wp-block-columns.has-background){padding:1.25em 2.375em}.wp-block-column{flex-grow:1;min-width:0;overflow-wrap:break-word;word-break:break-word}.wp-block-column.is-vertically-aligned-top{align-self:flex-start}.wp-block-column.is-vertically-aligned-center{align-self:center}.wp-block-column.is-vertically-aligned-bottom{align-self:flex-end}.wp-block-column.is-vertically-aligned-stretch{align-self:stretch}.wp-block-column.is-vertically-aligned-bottom,.wp-block-column.is-vertically-aligned-center,.wp-block-column.is-vertically-aligned-top{width:100%}\n\n/* global-styles-inline-css */\n:root{--wp--preset--aspect-ratio--square: 1;--wp--preset--aspect-ratio--4-3: 4/3;--wp--preset--aspect-ratio--3-4: 3/4;--wp--preset--aspect-ratio--3-2: 3/2;--wp--preset--aspect-ratio--2-3: 2/3;--wp--preset--aspect-ratio--16-9: 16/9;--wp--preset--aspect-ratio--9-16: 9/16;--wp--preset--color--black: #000000;--wp--preset--color--cyan-bluish-gray: #abb8c3;--wp--preset--color--white: #ffffff;--wp--preset--color--pale-pink: #f78da7;--wp--preset--color--vivid-red: #cf2e2e;--wp--preset--color--luminous-vivid-orange: #ff6900;--wp--preset--color--luminous-vivid-amber: #fcb900;--wp--preset--color--light-green-cyan: #7bdcb5;--wp--preset--color--vivid-green-cyan: #00d084;--wp--preset--color--pale-cyan-blue: #8ed1fc;--wp--preset--color--vivid-cyan-blue: #0693e3;--wp--preset--color--vivid-purple: #9b51e0;--wp--preset--gradient--vivid-cyan-blue-to-vivid-purple: linear-gradient(135deg,rgb(6,147,227) 0%,rgb(155,81,224) 100%);--wp--preset--gradient--light-green-cyan-to-vivid-green-cyan: linear-gradient(135deg,rgb(122,220,180) 0%,rgb(0,208,130) 100%);--wp--preset--gradient--luminous-vivid-amber-to-luminous-vivid-orange: linear-gradient(135deg,rgb(252,185,0) 0%,rgb(255,105,0) 100%);--wp--preset--gradient--luminous-vivid-orange-to-vivid-red: linear-gradient(135deg,rgb(255,105,0) 0%,rgb(207,46,46) 100%);--wp--preset--gradient--very-light-gray-to-cyan-bluish-gray: linear-gradient(135deg,rgb(238,238,238) 0%,rgb(169,184,195) 100%);--wp--preset--gradient--cool-to-warm-spectrum: linear-gradient(135deg,rgb(74,234,220) 0%,rgb(151,120,209) 20%,rgb(207,42,186) 40%,rgb(238,44,130) 60%,rgb(251,105,98) 80%,rgb(254,248,76) 100%);--wp--preset--gradient--blush-light-purple: linear-gradient(135deg,rgb(255,206,236) 0%,rgb(152,150,240) 100%);--wp--preset--gradient--blush-bordeaux: linear-gradient(135deg,rgb(254,205,165) 0%,rgb(254,45,45) 50%,rgb(107,0,62) 100%);--wp--preset--gradient--luminous-dusk: linear-gradient(135deg,rgb(255,203,112) 0%,rgb(199,81,192) 50%,rgb(65,88,208) 100%);--wp--preset--gradient--pale-ocean: linear-gradient(135deg,rgb(255,245,203) 0%,rgb(182,227,212) 50%,rgb(51,167,181) 100%);--wp--preset--gradient--electric-grass: linear-gradient(135deg,rgb(202,248,128) 0%,rgb(113,206,126) 100%);--wp--preset--gradient--midnight: linear-gradient(135deg,rgb(2,3,129) 0%,rgb(40,116,252) 100%);--wp--preset--font-size--small: 13px;--wp--preset--font-size--medium: 20px;--wp--preset--font-size--large: 36px;--wp--preset--font-size--x-large: 42px;--wp--preset--spacing--20: 0.44rem;--wp--preset--spacing--30: 0.67rem;--wp--preset--spacing--40: 1rem;--wp--preset--spacing--50: 1.5rem;--wp--preset--spacing--60: 2.25rem;--wp--preset--spacing--70: 3.38rem;--wp--preset--spacing--80: 5.06rem;--wp--preset--shadow--natural: 6px 6px 9px rgba(0, 0, 0, 0.2);--wp--preset--shadow--deep: 12px 12px 50px rgba(0, 0, 0, 0.4);--wp--preset--shadow--sharp: 6px 6px 0px rgba(0, 0, 0, 0.2);--wp--preset--shadow--outlined: 6px 6px 0px -3px rgb(255, 255, 255), 6px 6px rgb(0, 0, 0);--wp--preset--shadow--crisp: 6px 6px 0px rgb(0, 0, 0);}.wp-block-button{--wp--preset--dimension--25: 25%;--wp--preset--dimension--50: 50%;--wp--preset--dimension--75: 75%;--wp--preset--dimension--100: 100%;}:where(body) { margin: 0; }:where(.is-layout-flex){gap: 0.5em;}:where(.is-layout-grid){gap: 0.5em;}body .is-layout-flex{display: flex;}.is-layout-flex{flex-wrap: wrap;align-items: center;}.is-layout-flex > :is(*, div){margin: 0;}body .is-layout-grid{display: grid;}.is-layout-grid > :is(*, div){margin: 0;}body{padding-top: 0px;padding-right: 0px;padding-bottom: 0px;padding-left: 0px;}:root :where(.wp-element-button, .wp-block-button__link){background-color: #32373c;border-width: 0;color: #fff;font-family: inherit;font-size: inherit;font-style: inherit;font-weight: inherit;letter-spacing: inherit;line-height: inherit;padding-top: calc(0.667em + 2px);padding-right: calc(1.333em + 2px);padding-bottom: calc(0.667em + 2px);padding-left: calc(1.333em + 2px);text-decoration: none;text-transform: inherit;}.has-black-color{color: var(--wp--preset--color--black) !important;}.has-cyan-bluish-gray-color{color: var(--wp--preset--color--cyan-bluish-gray) !important;}.has-white-color{color: var(--wp--preset--color--white) !important;}.has-pale-pink-color{color: var(--wp--preset--color--pale-pink) !important;}.has-vivid-red-color{color: var(--wp--preset--color--vivid-red) !important;}.has-luminous-vivid-orange-color{color: var(--wp--preset--color--luminous-vivid-orange) !important;}.has-luminous-vivid-amber-color{color: var(--wp--preset--color--luminous-vivid-amber) !important;}.has-light-green-cyan-color{color: var(--wp--preset--color--light-green-cyan) !important;}.has-vivid-green-cyan-color{color: var(--wp--preset--color--vivid-green-cyan) !important;}.has-pale-cyan-blue-color{color: var(--wp--preset--color--pale-cyan-blue) !important;}.has-vivid-cyan-blue-color{color: var(--wp--preset--color--vivid-cyan-blue) !important;}.has-vivid-purple-color{color: var(--wp--preset--color--vivid-purple) !important;}.has-black-background-color{background-color: var(--wp--preset--color--black) !important;}.has-cyan-bluish-gray-background-color{background-color: var(--wp--preset--color--cyan-bluish-gray) !important;}.has-white-background-color{background-color: var(--wp--preset--color--white) !important;}.has-pale-pink-background-color{background-color: var(--wp--preset--color--pale-pink) !important;}.has-vivid-red-background-color{background-color: var(--wp--preset--color--vivid-red) !important;}.has-luminous-vivid-orange-background-color{background-color: var(--wp--preset--color--luminous-vivid-orange) !important;}.has-luminous-vivid-amber-background-color{background-color: var(--wp--preset--color--luminous-vivid-amber) !important;}.has-light-green-cyan-background-color{background-color: var(--wp--preset--color--light-green-cyan) !important;}.has-vivid-green-cyan-background-color{background-color: var(--wp--preset--color--vivid-green-cyan) !important;}.has-pale-cyan-blue-background-color{background-color: var(--wp--preset--color--pale-cyan-blue) !important;}.has-vivid-cyan-blue-background-color{background-color: var(--wp--preset--color--vivid-cyan-blue) !important;}.has-vivid-purple-background-color{background-color: var(--wp--preset--color--vivid-purple) !important;}.has-black-border-color{border-color: var(--wp--preset--color--black) !important;}.has-cyan-bluish-gray-border-color{border-color: var(--wp--preset--color--cyan-bluish-gray) !important;}.has-white-border-color{border-color: var(--wp--preset--color--white) !important;}.has-pale-pink-border-color{border-color: var(--wp--preset--color--pale-pink) !important;}.has-vivid-red-border-color{border-color: var(--wp--preset--color--vivid-red) !important;}.has-luminous-vivid-orange-border-color{border-color: var(--wp--preset--color--luminous-vivid-orange) !important;}.has-luminous-vivid-amber-border-color{border-color: var(--wp--preset--color--luminous-vivid-amber) !important;}.has-light-green-cyan-border-color{border-color: var(--wp--preset--color--light-green-cyan) !important;}.has-vivid-green-cyan-border-color{border-color: var(--wp--preset--color--vivid-green-cyan) !important;}.has-pale-cyan-blue-border-color{border-color: var(--wp--preset--color--pale-cyan-blue) !important;}.has-vivid-cyan-blue-border-color{border-color: var(--wp--preset--color--vivid-cyan-blue) !important;}.has-vivid-purple-border-color{border-color: var(--wp--preset--color--vivid-purple) !important;}.has-vivid-cyan-blue-to-vivid-purple-gradient-background{background: var(--wp--preset--gradient--vivid-cyan-blue-to-vivid-purple) !important;}.has-light-green-cyan-to-vivid-green-cyan-gradient-background{background: var(--wp--preset--gradient--light-green-cyan-to-vivid-green-cyan) !important;}.has-luminous-vivid-amber-to-luminous-vivid-orange-gradient-background{background: var(--wp--preset--gradient--luminous-vivid-amber-to-luminous-vivid-orange) !important;}.has-luminous-vivid-orange-to-vivid-red-gradient-background{background: var(--wp--preset--gradient--luminous-vivid-orange-to-vivid-red) !important;}.has-very-light-gray-to-cyan-bluish-gray-gradient-background{background: var(--wp--preset--gradient--very-light-gray-to-cyan-bluish-gray) !important;}.has-cool-to-warm-spectrum-gradient-background{background: var(--wp--preset--gradient--cool-to-warm-spectrum) !important;}.has-blush-light-purple-gradient-background{background: var(--wp--preset--gradient--blush-light-purple) !important;}.has-blush-bordeaux-gradient-background{background: var(--wp--preset--gradient--blush-bordeaux) !important;}.has-luminous-dusk-gradient-background{background: var(--wp--preset--gradient--luminous-dusk) !important;}.has-pale-ocean-gradient-background{background: var(--wp--preset--gradient--pale-ocean) !important;}.has-electric-grass-gradient-background{background: var(--wp--preset--gradient--electric-grass) !important;}.has-midnight-gradient-background{background: var(--wp--preset--gradient--midnight) !important;}.has-small-font-size{font-size: var(--wp--preset--font-size--small) !important;}.has-medium-font-size{font-size: var(--wp--preset--font-size--medium) !important;}.has-large-font-size{font-size: var(--wp--preset--font-size--large) !important;}.has-x-large-font-size{font-size: var(--wp--preset--font-size--x-large) !important;}\n:where(.wp-block-columns.is-layout-flex){gap: 2em;}:where(.wp-block-columns.is-layout-grid){gap: 2em;}\n\n/* core-block-supports-inline-css */\n.wp-container-core-columns-is-layout-8f761849{flex-wrap:nowrap;}";
@@ -283,7 +327,10 @@ body[data-two="1"] .ovwrap{display:block}
     wpify: 1,
     two: 1,
     ovw: 1920,
-    miniPct: 28
+    miniPct: 28,
+    miniPos: null,
+    label: "固定ページ",
+    side: "none"
   };
 
   function $(id){ return document.getElementById(id); }
@@ -357,7 +404,8 @@ body[data-two="1"] .ovwrap{display:block}
     if (S.wpify && !isFullPage(S.code)) content = wpify(content);
     var tpl = S.tpl.indexOf("{{CONTENT}}") >= 0 ? S.tpl : S.tpl + "\n{{CONTENT}}";
     var ttl = String(S.title || "").replace(/&/g,"&amp;").replace(/</g,"&lt;");
-    var inner = tpl.split("{{TITLE}}").join(ttl).split("{{CONTENT}}").join(content);
+    var lbl = String(S.label || "").replace(/&/g,"&amp;").replace(/</g,"&lt;");
+    var inner = tpl.split("{{TITLE}}").join(ttl).split("{{LABEL}}").join(lbl).split("{{CONTENT}}").join(content);
     var bcls = S.bodyclass;
     fullPage = isFullPage(S.code);
     if (fullPage) { inner = content; bcls = bodyClassOf(S.code) || S.bodyclass; }
@@ -370,12 +418,31 @@ body[data-two="1"] .ovwrap{display:block}
 
   var frame = $("frame"), holder = $("holder"), stage = $("stage");
   var timer = null;
-  var says = ["ぴよっ、更新したよ","できたてだよ","いい感じ？","ちら見ちら見","おっ、変わったね","ぴよぴよ"];
-  var chick = $("chick"), chickTimer = null;
-  function hop(){
-    chick.setAttribute("data-say", says[Math.floor(Math.random()*says.length)]);
+  var says = ["ぴよっ、更新したよ","できたてだよ","いい感じ？","ちら見ちら見","おっ、変わったね","ぴよぴよ",
+    "ふむふむ","ここ、直した？","ちらっ","見えてるよ〜","ぴよ、お疲れさま","のぞき見中…","ほうほう","いいね、いいね",
+    "ぴよっと反映","続けて続けて","ちょこちょこ確認えらい","画像のalt、入れた？","全角スペース、混ざってない？",
+    "リンク先、合ってる？","誤字、ない…かな？","ぴよー","もうひと息","うん、いい感じ","ちゅんちゅん…あ、ひよこだった"];
+  var faces = ["🐣","🐥","🐤","🐥","🐣","🐤","🐔"];
+  var chick = $("chick"), chickTimer = null, lastSay = "", lastFace = "", hopCount = 0;
+  function pickNot(list, last){
+    var v; do { v = list[Math.floor(Math.random()*list.length)]; } while (v === last && list.length > 1);
+    return v;
+  }
+  function hop(text){
+    hopCount++;
+    var t = text;
+    if (!t) {
+      var h = new Date().getHours();
+      if (hopCount % 12 === 0) t = "ずっとえらい！ちょっと休む？";
+      else if (Math.random() < 0.12) t = h < 10 ? "おはよう、今日もちら見！" : (h >= 17 ? "そろそろ帰る時間かな？" : (h >= 12 && h < 14 ? "お昼ごはん、食べた？" : pickNot(says, lastSay)));
+      else t = pickNot(says, lastSay);
+    }
+    lastSay = t;
+    lastFace = pickNot(faces, lastFace);
+    chick.textContent = lastFace;
+    chick.setAttribute("data-say", t);
     chick.classList.remove("hop"); void chick.offsetWidth; chick.classList.add("hop");
-    clearTimeout(chickTimer); chickTimer = setTimeout(function(){ chick.classList.remove("hop"); }, 1600);
+    clearTimeout(chickTimer); chickTimer = setTimeout(function(){ chick.classList.remove("hop"); }, 2200);
   }
   var firstRender = true;
   function render(){
@@ -397,7 +464,147 @@ body[data-two="1"] .ovwrap{display:block}
     $("info").textContent = "幅 " + w + "px ・ 100%" + note;
     $("cap2").textContent = "本来の見え方（この枠の幅 " + w + "px ・ 100%）" + note;
   }
+  // 公開前チェック：貼ったHTMLの中身だけを見る
+  function runCheck(){
+    var items = [];
+    function add(level, title, detail, samples){ items.push({level: level, title: title, detail: detail || "", samples: samples || []}); }
+    function short(s, n){ s = String(s).replace(/\s+/g, " ").trim(); return s.length > n ? s.slice(0, n) + "…" : s; }
+    var src = S.code || "";
+    var doc = new DOMParser().parseFromString(src, "text/html");
+    var root = doc.querySelector(".contents-info") || doc.querySelector("#main-contents") || doc.querySelector("main") || doc.body;
+    var scope = root === doc.body ? "" : "（ページ全体のうち本文の部分を調べています）";
+
+    // WordPressのブロックコメント
+    var stripped = src.replace(/<!--(?!\s*\/?wp:)[\s\S]*?-->/g, "");
+    var allOpen = stripped.match(/<!--\s*wp:[\s\S]*?-->/g) || [];
+    var opens = allOpen.filter(function(c){ return !/\/\s*-->$/.test(c); }).length;
+    var closes = (stripped.match(/<!--\s*\/wp:[\s\S]*?-->/g) || []).length;
+    if (opens !== closes) add("warn", "ブロックのコメントの数が合っていません", "<!-- wp:… --> が " + opens + " 個、<!-- /wp:… --> が " + closes + " 個。コピーの途中で切れていないか見てね。");
+
+    // 閉じタグ
+    var plain = src.replace(/<!--[\s\S]*?-->/g, "").replace(/<(script|style)[\s\S]*?<\/\1>/gi, "");
+    var bad = [];
+    ["div","span","a","ul","ol","li","table","tr","td","th","strong","em","p","h2","h3","h4"].forEach(function(t){
+      var o = (plain.match(new RegExp("<" + t + "[\\s>]", "gi")) || []).length;
+      var c = (plain.match(new RegExp("</" + t + "\\s*>", "gi")) || []).length;
+      if (o !== c) bad.push("<" + t + "> 開き " + o + " ／ 閉じ " + c);
+    });
+    if (bad.length) add("warn", "開きタグと閉じタグの数が合わないところがあります", "貼ったコードの一部だけを見ているときは、そのせいかも。", bad);
+
+    // 画像
+    var imgs = Array.prototype.slice.call(root.querySelectorAll("img"));
+    var noAlt = imgs.filter(function(i){ return !i.hasAttribute("alt"); });
+    var emptyAlt = imgs.filter(function(i){ return i.hasAttribute("alt") && !i.getAttribute("alt").trim(); });
+    if (noAlt.length) add("warn", "alt（代替テキスト）がない画像が " + noAlt.length + " 枚", "", noAlt.slice(0, 6).map(function(i){ return short(i.getAttribute("src") || "(srcなし)", 70); }));
+    if (emptyAlt.length) add("note", "altが空の画像が " + emptyAlt.length + " 枚", "飾りの画像なら空でOK。内容を伝える画像なら説明を入れてね。", emptyAlt.slice(0, 6).map(function(i){ return short(i.getAttribute("src") || "(srcなし)", 70); }));
+    var httpImg = imgs.filter(function(i){ return /^http:\/\//i.test(i.getAttribute("src") || ""); });
+    if (httpImg.length) add("note", "http:// で始まる画像が " + httpImg.length + " 枚", "https のページに載せると、表示されないことがあります。", httpImg.slice(0, 5).map(function(i){ return short(i.getAttribute("src"), 70); }));
+
+    // リンク
+    var links = Array.prototype.slice.call(root.querySelectorAll("a"));
+    var noHref = links.filter(function(a){ var h = (a.getAttribute("href") || "").trim(); return !h || h === "#"; });
+    if (noHref.length) add("warn", "リンク先が空（または # のまま）のリンクが " + noHref.length + " 個", "", noHref.slice(0, 6).map(function(a){ return short(a.textContent, 40) || "(文字なし)"; }));
+    var oddHref = links.filter(function(a){ return /localhost|wp-admin|[?&]p=\d|[?&]page_id=\d|staging|\.local\b/i.test(a.getAttribute("href") || ""); });
+    if (oddHref.length) add("warn", "作業用っぽいURLのリンクが " + oddHref.length + " 個", "localhost・wp-admin・?p=123 など。", oddHref.slice(0, 5).map(function(a){ return short(a.getAttribute("href"), 80); }));
+    var httpLink = links.filter(function(a){ return /^http:\/\//i.test(a.getAttribute("href") || ""); });
+    if (httpLink.length) add("note", "http:// で始まるリンクが " + httpLink.length + " 個", "https があるサイトなら、https に直せるか見てね。", httpLink.slice(0, 5).map(function(a){ return short(a.getAttribute("href"), 80); }));
+    var spaceHref = links.filter(function(a){ return /[\s　-鿿]/.test((a.getAttribute("href") || "").trim()); });
+    if (spaceHref.length) add("note", "URLに空白や日本語が入っているリンクが " + spaceHref.length + " 個", "", spaceHref.slice(0, 5).map(function(a){ return short(a.getAttribute("href"), 80); }));
+    var vague = links.filter(function(a){ return /^(こちら|ここ|これ|click here|here|詳細|▶|＞|>)$/i.test(a.textContent.trim()); });
+    if (vague.length) add("note", "「こちら」「ここ」だけのリンクが " + vague.length + " 個", "読み上げソフトだとリンク先が伝わりません。「〇〇はこちら」の形が安心。");
+
+    // 見出し
+    var hs = Array.prototype.slice.call(root.querySelectorAll("h1,h2,h3,h4,h5,h6"));
+    var h1s = hs.filter(function(h){ return h.tagName === "H1"; });
+    if (h1s.length) add("warn", "本文の中に h1 が " + h1s.length + " 個あります", "ページタイトルがすでに h1 なので、本文は h2 から始めるのが基本。", h1s.slice(0, 4).map(function(h){ return short(h.textContent, 40); }));
+    var emptyH = hs.filter(function(h){ return !h.textContent.trim(); });
+    if (emptyH.length) add("warn", "文字のない見出しが " + emptyH.length + " 個");
+    var jumps = [], prev = 1;
+    hs.forEach(function(h){
+      var lv = Number(h.tagName.charAt(1));
+      if (lv > prev + 1) jumps.push("h" + prev + " → h" + lv + "：" + short(h.textContent, 30));
+      prev = lv;
+    });
+    if (jumps.length) add("note", "見出しのレベルが飛んでいるところがあります", "", jumps.slice(0, 5));
+
+    // 空の段落・brの連続・Wordの名残
+    var emptyP = Array.prototype.slice.call(root.querySelectorAll("p")).filter(function(p){ return !p.textContent.trim() && !p.querySelector("img,iframe,video,audio,svg,object"); });
+    if (emptyP.length) add("note", "中身のない段落（<p></p> や &nbsp; だけ）が " + emptyP.length + " 個", "余白を空行で作ると、スマホで崩れやすいです。");
+    var brs = (root.innerHTML.match(/(<br\s*\/?>\s*){2,}/gi) || []).length;
+    if (brs) add("note", "<br> が連続しているところが " + brs + " か所", "段落を分けたいなら <p> を分けるのがおすすめ。");
+    if (/class\s*=\s*["'][^"']*\bMso/i.test(src) || /<o:p>|mso-/i.test(src)) add("warn", "Wordから貼ったときの名残（Mso…）があります", "余計な書式が入って、見た目がずれる原因になります。");
+    var fonts = root.querySelectorAll("font").length;
+    if (fonts) add("note", "<font> タグが " + fonts + " 個あります");
+    var styled = root.querySelectorAll("[style]").length;
+    if (styled) add("note", "style属性の直書きが " + styled + " か所", "意図したものなら大丈夫。");
+
+    // 文字
+    var tw = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+    var texts = [], n;
+    while ((n = tw.nextNode())) {
+      var pn = n.parentNode && n.parentNode.nodeName;
+      if (pn === "SCRIPT" || pn === "STYLE") continue;
+      if (n.nodeValue.trim()) texts.push(n.nodeValue);
+    }
+    function scan(re, mark){
+      var out = [], total = 0;
+      texts.forEach(function(t){
+        var m, r = new RegExp(re.source, "g");
+        while ((m = r.exec(t))) {
+          total++;
+          if (out.length < 5) out.push(short(t.slice(Math.max(0, m.index - 8), m.index), 12).replace(/…$/, "") + "【" + (mark ? mark(m[0]) : m[0]) + "】" + t.slice(m.index + m[0].length, m.index + m[0].length + 8).replace(/\s+/g, " "));
+          if (m[0] === "") r.lastIndex++;
+        }
+      });
+      return {total: total, samples: out};
+    }
+    var r1 = scan(/　/, function(){ return "全角スペース"; });
+    if (r1.total) add("note", "全角スペースが " + r1.total + " か所", "字下げや「山田　太郎」のような名前の間なら意図どおりかも。", r1.samples);
+    var r2 = scan(/[｡-ﾟ]+/);
+    if (r2.total) add("warn", "半角カタカナが " + r2.total + " か所", "文字化けや検索のもとになります。全角にしよう。", r2.samples);
+    var r3 = scan(/[Ａ-Ｚａ-ｚ０-９]+/);
+    if (r3.total) add("note", "全角の英数字が " + r3.total + " か所", "電話番号・日付などは半角にそろえるとすっきり。", r3.samples);
+    var r4 = scan(/[Ⅰ-ⅿ①-⑳㈱㈲㈹№℡㌀-㏿]+/);
+    if (r4.total) add("note", "環境によって表示が変わりうる文字が " + r4.total + " か所", "丸数字・ローマ数字・㈱・㎡・№ など。", r4.samples);
+    var r5 = scan(/\S {2,}(?=\S)/, function(s){ return s.replace(/ /g, "␣"); });
+    if (r5.total) add("note", "半角スペースが連続しているところが " + r5.total + " か所", "HTMLでは1つに詰められるので、見た目は変わりません。", r5.samples);
+    var r6 = scan(/サンプル|ここにHTML|ダミー|TODO|XXX|xxx|テストテスト|○○|◯◯|□□|■■/);
+    if (r6.total) add("warn", "仮の文言が残っていませんか？", "サンプル・ダミー・TODO・○○ など。", r6.samples);
+    if (!String(S.title || "").trim()) add("note", "タイトル欄が空です", "プレビューの見出し・パンくずが空になっています。");
+
+    var warns = items.filter(function(i){ return i.level === "warn"; }).length;
+    var notes = items.length - warns;
+    var list = $("cklist");
+    list.textContent = "";
+    if (!items.length) {
+      var ok = document.createElement("div"); ok.className = "ck-ok";
+      ok.textContent = "気になるところは見つかりませんでした 🎉";
+      list.appendChild(ok);
+    }
+    items.sort(function(a, b){ return (a.level === "warn" ? 0 : 1) - (b.level === "warn" ? 0 : 1); });
+    items.forEach(function(it){
+      var d = document.createElement("div"); d.className = "ck-item";
+      var h = '<div class="t">' + (it.level === "warn" ? "⚠️ " : "💡 ") + esc(it.title) + '</div>';
+      if (it.detail) h += '<div class="d">' + esc(it.detail) + '</div>';
+      if (it.samples.length) h += '<ul>' + it.samples.map(function(s){ return '<li><code>' + esc(s) + '</code></li>'; }).join("") + '</ul>';
+      d.innerHTML = h;
+      list.appendChild(d);
+    });
+    $("cksum").textContent = "⚠️ 直したほうがよさそう " + warns + " 件 ・ 💡 確認してね " + notes + " 件" + scope;
+    var dlg = $("ckdlg");
+    if (dlg.showModal) { if (!dlg.open) dlg.showModal(); } else { dlg.setAttribute("open", ""); }
+    hop(!items.length ? "ぜんぶOK！ぴよー🎉" : (warns ? "ぴよ、" + warns + "件ひっかかったよ" : "気になるのは軽いのだけ！"));
+  }
+
   var bigMini = false;
+  var ovwrap = $("ovwrap"), ovcap = $("ovcap");
+  function placeMini(){
+    var pos = S.miniPos || {r: 24, t: 34};
+    var maxR = Math.max(0, pp.clientWidth - ovwrap.offsetWidth);
+    var maxT = Math.max(0, pp.clientHeight - ovwrap.offsetHeight);
+    ovwrap.style.right = Math.min(maxR, Math.max(0, pos.r)) + "px";
+    ovwrap.style.top = Math.min(maxT, Math.max(0, pos.t)) + "px";
+  }
   function fitOverview(){
     if (!S.two) return;
     var W = Number(S.ovw) || 1920;
@@ -413,7 +620,9 @@ body[data-two="1"] .ovwrap{display:block}
     ovframe.style.width = W + "px";
     ovframe.style.height = Math.round(H / sc) + "px";
     ovframe.style.transform = "scale(" + sc + ")";
-    $("ovcap").textContent = "大画面 " + W + "px（" + Math.round(sc * 100) + "%）・タップで" + (bigMini ? "小さく" : "拡大");
+    ovcap.textContent = "✥ ドラッグで移動・タップで" + (bigMini ? "小さく" : "拡大");
+    ovcap.title = "大画面 " + W + "px（" + Math.round(sc * 100) + "%）";
+    placeMini();
   }
   function fit(){
     if (!pp.clientWidth) return;
@@ -446,6 +655,8 @@ body[data-two="1"] .ovwrap{display:block}
     $("wpify").checked = !!S.wpify;
     $("ovw").value = S.ovw;
     $("miniPct").value = S.miniPct;
+    $("label").value = S.label;
+    $("side").value = S.side;
     $("preset").value = S.preset;
     $("tpl").value = S.tpl;
   }
@@ -463,7 +674,38 @@ body[data-two="1"] .ovwrap{display:block}
     $("css").addEventListener("input", function(){ S.css = this.value; save(); renderSoon(); });
     $("ovw").addEventListener("input", function(){ var v = Number(this.value); if (v >= 800) { S.ovw = v; save(); fit(); } });
     $("miniPct").addEventListener("input", function(){ var v = Number(this.value); if (v >= 10 && v <= 60) { S.miniPct = v; save(); fit(); } });
-    $("ovcap").addEventListener("click", function(){ bigMini = !bigMini; fit(); });
+    // 上の帯：ドラッグで移動、ちょん（動かさない）で拡大／縮小
+    var drag = null;
+    ovcap.addEventListener("pointerdown", function(e){
+      if (e.button) return;
+      var cur = S.miniPos || {r: 24, t: 34};
+      drag = {x: e.clientX, y: e.clientY, r: parseFloat(ovwrap.style.right) || cur.r, t: parseFloat(ovwrap.style.top) || cur.t, moved: false};
+      document.body.classList.add("dragging-mini");
+      try { ovcap.setPointerCapture(e.pointerId); } catch(err){}
+    });
+    ovcap.addEventListener("pointermove", function(e){
+      if (!drag) return;
+      var dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+      if (!drag.moved && Math.sqrt(dx*dx + dy*dy) > 6) { drag.moved = true; ovcap.classList.add("dragging"); }
+      if (drag.moved) { S.miniPos = {r: drag.r - dx, t: drag.t + dy}; placeMini(); }
+    });
+    ovcap.addEventListener("pointerup", function(){
+      if (!drag) return;
+      var moved = drag.moved; drag = null; ovcap.classList.remove("dragging"); document.body.classList.remove("dragging-mini");
+      if (moved) {
+        // 画面内に収まった位置を保存する
+        S.miniPos = {r: parseFloat(ovwrap.style.right) || 0, t: parseFloat(ovwrap.style.top) || 0}; save();
+      } else { bigMini = !bigMini; fit(); }
+    });
+    ovcap.addEventListener("pointercancel", function(){ drag = null; ovcap.classList.remove("dragging"); document.body.classList.remove("dragging-mini"); });
+    $("resetMini").addEventListener("click", function(){ S.miniPos = null; save(); fit(); });
+    $("precheck").addEventListener("click", runCheck);
+    $("ckclose").addEventListener("click", function(){ var d = $("ckdlg"); if (d.close) d.close(); else d.removeAttribute("open"); });
+    $("label").addEventListener("input", function(){ S.label = this.value; save(); renderSoon(); });
+    $("side").addEventListener("change", function(){
+      S.side = this.value; save();
+      if (S.preset === "page" || S.preset === "pagebody") setPreset(S.preset); // setPreset は下で定義（巻き上げ）
+    });
     function applyTwo(){
       document.body.dataset.two = S.two ? "1" : "0";
       $("twoRow").textContent = S.two ? "全体像を隠す" : "全体像を出す";
@@ -480,7 +722,8 @@ body[data-two="1"] .ovwrap{display:block}
       S.tpl = this.value; S.preset = "custom"; $("preset").value = "custom"; save(); syncKinds(); renderSoon();
     });
     function syncKinds(){
-      var k = S.preset === "news" || S.preset === "newsbody" ? "news" : (S.preset === "work" || S.preset === "workbody" ? "work" : "");
+      var k = S.preset === "news" || S.preset === "newsbody" ? "news" : (S.preset === "work" || S.preset === "workbody" ? "work" : (S.preset === "page" || S.preset === "pagebody" ? "page" : ""));
+      $("pageOpts").hidden = (k !== "page");
       Array.prototype.forEach.call($("kinds").querySelectorAll("button"), function(b){
         b.setAttribute("aria-pressed", String(b.dataset.k === k));
       });
