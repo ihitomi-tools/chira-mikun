@@ -134,7 +134,7 @@ dialog.ckdlg::backdrop{background:rgba(0,0,0,.5)}
     <button data-k="page" aria-pressed="false">固定ページ・その他</button>
   </div>
   <span class="pageopts" id="pageOpts" hidden>
-    <label>ページ名 <input id="label" spellcheck="false" placeholder="例：臨床研修制度" title="ヘッダーの大きい文字とパンくずに入る"></label>
+    <label>ヘッダーの文字 <input id="label" spellcheck="false" placeholder="例：医師を志す方・地域の方へ" title="青いヘッダーの大きい文字（親メニューの名前）。ページのタイトルは設定の「タイトル」に入れる"></label>
     <label>サイドバー
       <select id="side"><option value="none">なし</option><option value="news">お知らせ用</option><option value="work">活動報告用</option></select>
     </label>
@@ -275,7 +275,7 @@ dialog.ckdlg::backdrop{background:rgba(0,0,0,.5)}
     var body =
 '<main class="main">\n' +
 '  <div class="main-header-wrap contents-wrap"><div class="main-header">\n' +
-'    <p class="breadcrumb"><span><span><a href="'+SITE+'/">HOME</a></span> ＞ <span><a href="'+listUrl+'">'+label+'</a></span> ＞ <span class="breadcrumb_last" aria-current="page">{{TITLE}}</span></span></p>\n' +
+'    <p class="breadcrumb"><span><span><a href="'+SITE+'/">HOME</a></span> ＞ ' + (listUrl === null ? '' : '<span><a href="'+listUrl+'">'+label+'</a></span> ＞ ') + '<span class="breadcrumb_last" aria-current="page">{{TITLE}}</span></span></p>\n' +
 '  </div></div>\n' +
 '  <div id="main-contents" class="main-contents' + (sideHtml === false ? '' : ' two-column') + '">\n' +
 '    <section class="contents"><div class="contents">\n' +
@@ -292,9 +292,14 @@ dialog.ckdlg::backdrop{background:rgba(0,0,0,.5)}
   var WORK_BODYCLASS = "wp-singular work_report-template-default single single-work_report wp-theme-doctor_yamanashi metaslider-plugin";
   // 固定ページ・その他：ページ名は {{LABEL}}、サイドバーは設定で選ぶ（なし＝two-columnなし）
   var PAGE_BODYCLASS = "page-template-default page wp-theme-doctor_yamanashi metaslider-plugin";
+  function secName(i){ return NAV[i][0].replace(/<br>/g, ""); }
   function pageTpl(withHeaderFooter){
-    var side = S.side === "news" ? SIDE_NEWS : (S.side === "work" ? SIDE_WORK : false);
-    return postTpl("{{LABEL}}", "#", side, withHeaderFooter);
+    var side = false, m = /^sec:(\d+)$/.exec(S.side || "");
+    if (S.side === "news") side = SIDE_NEWS;
+    else if (S.side === "work") side = SIDE_WORK;
+    else if (m && NAV[m[1]]) side = listHtml(secName(m[1]), NAV[m[1]][2]);
+    // 固定ページのパンくずは「HOME ＞ ページ名」の2段
+    return postTpl("{{LABEL}}", null, side, withHeaderFooter);
   }
   var PRESETS = {
     news: { label: "お知らせ（ページ全体）", bodyclass: NEWS_BODYCLASS, tpl: postTpl("お知らせ", SITE+"/category/news/", SIDE_NEWS, true) },
@@ -329,8 +334,8 @@ dialog.ckdlg::backdrop{background:rgba(0,0,0,.5)}
     ovw: 1920,
     miniPct: 28,
     miniPos: null,
-    label: "固定ページ",
-    side: "none"
+    label: "医師を志す方・地域の方へ",
+    side: "sec:4"
   };
 
   function $(id){ return document.getElementById(id); }
@@ -666,6 +671,11 @@ dialog.ckdlg::backdrop{background:rgba(0,0,0,.5)}
     var sel = $("preset");
     Object.keys(PRESETS).forEach(function(k){ var o=document.createElement("option"); o.value=k; o.textContent=PRESETS[k].label; sel.appendChild(o); });
     var oc=document.createElement("option"); oc.value="custom"; oc.textContent="自分で書く"; sel.appendChild(oc);
+    var sideSel = $("side");
+    NAV.forEach(function(n, i){
+      if (!n[2].length) return;
+      var o = document.createElement("option"); o.value = "sec:" + i; o.textContent = "「" + secName(i) + "」の一覧"; sideSel.insertBefore(o, sideSel.querySelector("[value=none]"));
+    });
     applyToFields();
     setWidth(S.width);
 
@@ -703,7 +713,10 @@ dialog.ckdlg::backdrop{background:rgba(0,0,0,.5)}
     $("ckclose").addEventListener("click", function(){ var d = $("ckdlg"); if (d.close) d.close(); else d.removeAttribute("open"); });
     $("label").addEventListener("input", function(){ S.label = this.value; save(); renderSoon(); });
     $("side").addEventListener("change", function(){
-      S.side = this.value; save();
+      S.side = this.value;
+      var sm = /^sec:(\d+)$/.exec(S.side);
+      if (sm) { S.label = secName(sm[1]); $("label").value = S.label; } // 親メニュー名をヘッダーの文字にも入れる
+      save();
       if (S.preset === "page" || S.preset === "pagebody") setPreset(S.preset); // setPreset は下で定義（巻き上げ）
     });
     function applyTwo(){
