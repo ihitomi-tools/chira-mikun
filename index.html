@@ -47,6 +47,7 @@ main{flex:1; min-height:0; display:grid; grid-template-columns:minmax(300px,38%)
 .pane{min-height:0; display:flex; flex-direction:column}
 .editor{border-right:1px solid var(--line); background:var(--panel)}
 .tabs{display:none}
+.codebar{display:flex; align-items:center; gap:10px; padding:6px 12px; border-bottom:1px solid var(--line)}
 textarea{
   font-family:"BIZ UDGothic",monospace; font-size:13px; line-height:1.55;
   color:var(--ink); background:var(--code-bg); border:0; outline:0; resize:none;
@@ -159,6 +160,10 @@ dialog.ckdlg::backdrop{background:rgba(0,0,0,.5)}
 
 <main>
   <section class="pane editor">
+    <div class="codebar">
+      <button class="btn" id="repaste" title="今のコードを全部消して、コピーした内容に置き換える">貼り直し</button>
+      <span class="note" id="repasteNote">古いコードを消して、コピーした内容に丸ごと置き換えます</span>
+    </div>
     <textarea id="code" spellcheck="false" placeholder="ここにHTMLを貼る（本文だけでも、ページ全体でもOK）"></textarea>
     <details id="settings">
       <summary>設定（CSSのURL・外枠）</summary>
@@ -715,6 +720,19 @@ dialog.ckdlg::backdrop{background:rgba(0,0,0,.5)}
     ovcap.addEventListener("pointercancel", function(){ drag = null; ovcap.classList.remove("dragging"); document.body.classList.remove("dragging-mini"); });
     $("resetMini").addEventListener("click", function(){ S.miniPos = null; save(); fit(); });
     $("precheck").addEventListener("click", runCheck);
+    // 貼り直し：今のコードを全部消して、クリップボードの中身に置き換える
+    function setCode(v){ S.code = v; $("code").value = v; save(); render(); }
+    $("repaste").addEventListener("click", function(){
+      var note = $("repasteNote");
+      function manual(msg){ setCode(""); $("code").focus(); note.textContent = msg; }
+      if (!navigator.clipboard || !navigator.clipboard.readText) { manual("空にしました。Ctrl+V（スマホは長押し）で貼ってください"); return; }
+      navigator.clipboard.readText().then(function(t){
+        if (!t.trim()) { note.textContent = "クリップボードが空でした。先にコピーしてから押してね（今のコードはそのまま）"; return; }
+        setCode(t); $("code").scrollTop = 0;
+        note.textContent = "置き換えました（" + t.length + "文字）";
+        hop("貼り直したよ、まっさら！");
+      }, function(){ manual("読み取りが許可されなかったので、空にしました。Ctrl+V（スマホは長押し）で貼ってください"); });
+    });
     $("ckclose").addEventListener("click", function(){ var d = $("ckdlg"); if (d.close) d.close(); else d.removeAttribute("open"); });
     $("label").addEventListener("input", function(){ S.label = this.value; save(); renderSoon(); });
     $("side").addEventListener("change", function(){
