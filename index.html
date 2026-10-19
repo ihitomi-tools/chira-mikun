@@ -99,6 +99,10 @@ iframe{border:0; display:block; background:#fff; width:100%}
     <button data-w="768" aria-pressed="false">タブレット</button>
     <button data-w="375" aria-pressed="false">スマホ</button>
   </div>
+  <div class="seg" id="kinds" role="group" aria-label="ページの種類">
+    <button data-k="news" aria-pressed="false">お知らせ</button>
+    <button data-k="work" aria-pressed="false">活動報告</button>
+  </div>
   <button class="btn" id="hideEditor" title="コード欄を隠して、プレビューを広く見る">コード欄を隠す</button>
   <button class="btn" id="reload" title="CSSをキャッシュなしで読み込み直す">CSS再読込</button>
   <span class="spacer"></span>
@@ -411,17 +415,30 @@ iframe{border:0; display:block; background:#fff; width:100%}
     $("title").addEventListener("input", function(){ S.title = this.value; save(); renderSoon(); });
     $("bodyclass").addEventListener("input", function(){ S.bodyclass = this.value; save(); renderSoon(); });
     $("tpl").addEventListener("input", function(){
-      S.tpl = this.value; S.preset = "custom"; $("preset").value = "custom"; save(); renderSoon();
+      S.tpl = this.value; S.preset = "custom"; $("preset").value = "custom"; save(); syncKinds(); renderSoon();
     });
-    $("preset").addEventListener("change", function(){
-      S.preset = this.value;
-      if (PRESETS[this.value]) {
-        S.tpl = PRESETS[this.value].tpl; S.bodyclass = PRESETS[this.value].bodyclass;
+    function syncKinds(){
+      var k = S.preset === "news" || S.preset === "newsbody" ? "news" : (S.preset === "work" || S.preset === "workbody" ? "work" : "");
+      Array.prototype.forEach.call($("kinds").querySelectorAll("button"), function(b){
+        b.setAttribute("aria-pressed", String(b.dataset.k === k));
+      });
+    }
+    function setPreset(k){
+      S.preset = k;
+      if (PRESETS[k]) {
+        S.tpl = PRESETS[k].tpl; S.bodyclass = PRESETS[k].bodyclass;
         $("tpl").value = S.tpl; $("bodyclass").value = S.bodyclass;
       }
-      save(); render();
+      $("preset").value = k;
+      save(); syncKinds(); render();
+    }
+    $("preset").addEventListener("change", function(){ setPreset(this.value); });
+    $("kinds").addEventListener("click", function(e){
+      var b = e.target.closest("button"); if (!b) return;
+      var bodyOnly = /body$/.test(S.preset);
+      setPreset(b.dataset.k + (bodyOnly ? "body" : ""));
     });
-
+    syncKinds();
     $("widths").addEventListener("click", function(e){
       var b = e.target.closest("button"); if (!b) return;
       setWidth(b.dataset.w);
@@ -439,7 +456,7 @@ iframe{border:0; display:block; background:#fff; width:100%}
       if (!confirm("設定を初期値に戻します（貼ったHTMLはそのまま残ります）。よろしいですか？")) return;
       var keep = S.code;
       for (var k in DEFAULTS) S[k] = DEFAULTS[k];
-      S.code = keep; save(); applyToFields(); setWidth(S.width); render();
+      S.code = keep; save(); applyToFields(); setWidth(S.width); syncKinds(); render();
     });
 
     function syncTabs(){
