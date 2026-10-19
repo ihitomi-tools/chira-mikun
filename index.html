@@ -125,6 +125,10 @@ iframe{border:0; display:block; background:#fff; width:100%}
         <label>読み込むCSS（1行に1つ）
           <textarea id="css" spellcheck="false"></textarea>
         </label>
+        <label style="display:flex; align-items:center; gap:8px">
+          <input type="checkbox" id="wpify" style="width:auto">
+          <span>コードエディタのHTMLに、WordPressが表示時に足すclassを補う（&lt;!-- wp:... --&gt; があるときだけ働く）</span>
+        </label>
         <label>追加CSS（サイトのhead内にあるインラインCSS。画像・段組みの見た目用）
           <textarea id="extra" spellcheck="false"></textarea>
         </label>
@@ -250,7 +254,8 @@ iframe{border:0; display:block; background:#fff; width:100%}
     extra: EXTRA_CSS,
     tpl: PRESETS.news.tpl,
     width: "fluid",
-    hide: 0
+    hide: 0,
+    wpify: 1
   };
 
   function $(id){ return document.getElementById(id); }
@@ -274,6 +279,40 @@ iframe{border:0; display:block; background:#fff; width:100%}
     var m = /<body[^>]*>([\s\S]*)<\/body>/i.exec(src);
     return m ? m[1] : src;
   }
+  // ブロックエディタ（コードエディタ）のHTMLに、WordPressが表示時に足すclassを補う
+  var wpApplied = false;
+  function addCls(attrs, cls){
+    attrs = attrs || "";
+    var m = /\sclass=("([^"]*)"|'([^']*)')/.exec(attrs);
+    if (m) {
+      var cur = m[2] !== undefined ? m[2] : m[3];
+      var have = cur.split(/\s+/);
+      var add = cls.filter(function(c){ return have.indexOf(c) < 0; });
+      if (!add.length) return attrs;
+      return attrs.replace(m[0], ' class="' + (cur + " " + add.join(" ")).trim() + '"');
+    }
+    return attrs + ' class="' + cls.join(" ") + '"';
+  }
+  function wpify(src){
+    wpApplied = false;
+    if (!/<!--\s*wp:/.test(src)) return src;
+    var rules = [
+      ["paragraph", "p", ["wp-block-paragraph"]],
+      ["heading", "h[1-6]", ["wp-block-heading"]],
+      ["list", "(?:ul|ol)", ["wp-block-list"]],
+      ["columns", "div", ["is-layout-flex", "wp-block-columns-is-layout-flex"]],
+      ["column", "div", ["is-layout-flow", "wp-block-column-is-layout-flow"]],
+      ["group", "div", ["is-layout-flow", "wp-block-group-is-layout-flow"]]
+    ];
+    rules.forEach(function(r){
+      var re = new RegExp("(<!--\\s*wp:" + r[0] + "(?![\\w-])(?:\\s+\\{[\\s\\S]*?\\})?\\s*-->\\s*)<(" + r[1] + ")((?:\\s[^>]*)?)>", "g");
+      src = src.replace(re, function(m, c, tag, attrs){
+        wpApplied = true;
+        return c + "<" + tag + addCls(attrs, r[2]) + ">";
+      });
+    });
+    return src;
+  }
   function isFullPage(src){ return /<body[\s>]/i.test(src) || /<main[\s>]/i.test(src); }
   function bodyClassOf(src){
     var m = /<body[^>]*\sclass=["']([^"']*)["']/i.exec(src);
@@ -286,6 +325,8 @@ iframe{border:0; display:block; background:#fff; width:100%}
       return '<link rel="stylesheet" href="' + esc(url) + '">';
     }).join("\n");
     var content = bodyOf(S.code);
+    wpApplied = false;
+    if (S.wpify && !isFullPage(S.code)) content = wpify(content);
     var tpl = S.tpl.indexOf("{{CONTENT}}") >= 0 ? S.tpl : S.tpl + "\n{{CONTENT}}";
     var ttl = String(S.title || "").replace(/&/g,"&amp;").replace(/</g,"&lt;");
     var inner = tpl.split("{{TITLE}}").join(ttl).split("{{CONTENT}}").join(content);
@@ -321,7 +362,7 @@ iframe{border:0; display:block; background:#fff; width:100%}
 
   function updateInfo(){
     var w = Math.round(holder.getBoundingClientRect().width);
-    $("info").textContent = "幅 " + w + "px ・ 100%" + (fullPage ? " ・ ページ全体として表示中（外枠は使っていません）" : "");
+    $("info").textContent = "幅 " + w + "px ・ 100%" + (fullPage ? " ・ ページ全体として表示中（外枠は使っていません）" : "") + (wpApplied ? " ・ ブロックのclassを補って表示中" : "");
   }
   function fit(){
     if (!stage.clientWidth || !stage.clientHeight) return; // 非表示のタブでは計算しない
@@ -349,6 +390,7 @@ iframe{border:0; display:block; background:#fff; width:100%}
     $("bodyclass").value = S.bodyclass;
     $("title").value = S.title;
     $("extra").value = S.extra;
+    $("wpify").checked = !!S.wpify;
     $("preset").value = S.preset;
     $("tpl").value = S.tpl;
   }
@@ -364,6 +406,7 @@ iframe{border:0; display:block; background:#fff; width:100%}
     $("code").addEventListener("input", function(){ S.code = this.value; save(); renderSoon(); });
     $("base").addEventListener("input", function(){ S.base = this.value.trim(); save(); renderSoon(); });
     $("css").addEventListener("input", function(){ S.css = this.value; save(); renderSoon(); });
+    $("wpify").addEventListener("change", function(){ S.wpify = this.checked ? 1 : 0; save(); render(); });
     $("extra").addEventListener("input", function(){ S.extra = this.value; save(); renderSoon(); });
     $("title").addEventListener("input", function(){ S.title = this.value; save(); renderSoon(); });
     $("bodyclass").addEventListener("input", function(){ S.bodyclass = this.value; save(); renderSoon(); });
