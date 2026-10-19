@@ -67,6 +67,13 @@ summary{padding:8px 12px; cursor:pointer; font-size:13px; color:var(--sub)}
 .stage{flex:1; min-height:0; background:var(--stage); overflow:auto; padding:8px; position:relative}
 .holder{margin:0 auto; overflow:hidden; background:#fff; box-shadow:0 2px 14px rgba(0,0,0,.25); border-radius:6px}
 iframe{border:0; display:block; background:#fff; width:100%}
+.ovwrap,.cap#cap2{display:none}
+body[data-two="1"] .ovwrap{display:block; flex:0 0 auto; background:var(--stage); border-bottom:1px solid var(--line)}
+body[data-two="1"] .cap#cap2{display:block}
+.cap{font-size:11.5px; color:var(--sub); padding:4px 12px; background:var(--panel); border-bottom:1px solid var(--line); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.ovstage{padding:8px 8px 10px; overflow:hidden}
+.ovholder{margin:0 auto; overflow:hidden; background:#fff; box-shadow:0 2px 14px rgba(0,0,0,.25); border-radius:6px}
+#ovframe{border:0; display:block; background:#fff; transform-origin:0 0}
 .chick{position:absolute; right:14px; bottom:10px; font-size:24px; opacity:.9; pointer-events:none; transform-origin:50% 100%}
 .chick.hop{animation:hop .6s ease}
 @keyframes hop{0%{transform:translateY(0) scale(1,1)}25%{transform:translateY(0) scale(1.15,.8)}55%{transform:translateY(-16px) scale(.95,1.1)}80%{transform:translateY(0) scale(1.1,.85)}100%{transform:translateY(0) scale(1,1)}}
@@ -103,6 +110,7 @@ iframe{border:0; display:block; background:#fff; width:100%}
     <button data-k="news" aria-pressed="false">お知らせ</button>
     <button data-k="work" aria-pressed="false">活動報告</button>
   </div>
+  <button class="btn" id="twoRow" title="大きいモニターの全体像を上に出して、2段で見る">2段にする</button>
   <button class="btn" id="hideEditor" title="コード欄を隠して、プレビューを広く見る">コード欄を隠す</button>
   <button class="btn" id="reload" title="CSSをキャッシュなしで読み込み直す">CSS再読込</button>
   <span class="spacer"></span>
@@ -136,6 +144,9 @@ iframe{border:0; display:block; background:#fff; width:100%}
         <label>追加CSS（サイトのhead内にあるインラインCSS。画像・段組みの見た目用）
           <textarea id="extra" spellcheck="false"></textarea>
         </label>
+        <label>全体像の幅（大きいモニターの横幅 px。2段表示の上段で使う）
+          <input id="ovw" type="number" min="800" max="3840" step="10">
+        </label>
         <label>bodyのclass
           <input id="bodyclass" spellcheck="false">
         </label>
@@ -152,6 +163,11 @@ iframe{border:0; display:block; background:#fff; width:100%}
   </section>
 
   <section class="pane previewpane">
+    <div class="ovwrap" id="ovwrap">
+      <div class="cap" id="ovcap"></div>
+      <div class="ovstage"><div class="ovholder" id="ovholder"><iframe id="ovframe" title="大画面の全体像" sandbox="allow-popups allow-popups-to-escape-sandbox"></iframe></div></div>
+    </div>
+    <div class="cap" id="cap2"></div>
     <div class="stage" id="stage">
       <div class="holder" id="holder"><iframe id="frame" title="プレビュー" sandbox="allow-popups allow-popups-to-escape-sandbox"></iframe></div>
       <div class="chick" id="chick" data-say="ぴよっ、更新したよ">🐣</div>
@@ -259,7 +275,9 @@ iframe{border:0; display:block; background:#fff; width:100%}
     tpl: PRESETS.news.tpl,
     width: "fluid",
     hide: 0,
-    wpify: 1
+    wpify: 1,
+    two: 0,
+    ovw: 1920
   };
 
   function $(id){ return document.getElementById(id); }
@@ -355,7 +373,9 @@ iframe{border:0; display:block; background:#fff; width:100%}
   }
   var firstRender = true;
   function render(){
-    frame.srcdoc = buildDoc();
+    var doc = buildDoc();
+    frame.srcdoc = doc;
+    if (S.two) ovframe.srcdoc = doc;
     updateInfo();
     if (firstRender) { firstRender = false; } else { hop(); }
   }
@@ -364,11 +384,30 @@ iframe{border:0; display:block; background:#fff; width:100%}
     timer = setTimeout(render, 250);
   }
 
+  var ovframe = $("ovframe"), ovholder = $("ovholder"), pp = document.querySelector(".previewpane");
   function updateInfo(){
     var w = Math.round(holder.getBoundingClientRect().width);
-    $("info").textContent = "幅 " + w + "px ・ 100%" + (fullPage ? " ・ ページ全体として表示中（外枠は使っていません）" : "") + (wpApplied ? " ・ ブロックのclassを補って表示中" : "");
+    var note = (fullPage ? " ・ ページ全体として表示中（外枠は使っていません）" : "") + (wpApplied ? " ・ ブロックのclassを補って表示中" : "");
+    $("info").textContent = "幅 " + w + "px ・ 100%" + note;
+    $("cap2").textContent = "本来の見え方（この枠の幅 " + w + "px ・ 100%）" + note;
+  }
+  function fitOverview(){
+    if (!S.two) return;
+    var availW = Math.max(100, pp.clientWidth - 16);
+    var W = Number(S.ovw) || 1920;
+    var sc = Math.min(1, availW / W);
+    var maxH = Math.max(140, pp.clientHeight * 0.45);
+    var H = Math.min(maxH, Math.round(availW * 9 / 16));
+    ovholder.style.width = Math.round(W * sc) + "px";
+    ovholder.style.height = H + "px";
+    ovframe.style.width = W + "px";
+    ovframe.style.height = Math.round(H / sc) + "px";
+    ovframe.style.transform = "scale(" + sc + ")";
+    $("ovcap").textContent = "大きいモニターの全体像（幅 " + W + "px を " + Math.round(sc * 100) + "% に縮小）";
   }
   function fit(){
+    if (!pp.clientWidth) return;
+    fitOverview();
     if (!stage.clientWidth || !stage.clientHeight) return; // 非表示のタブでは計算しない
     var availW = Math.max(100, stage.clientWidth - 16);
     var availH = Math.max(100, stage.clientHeight - 16);
@@ -395,6 +434,7 @@ iframe{border:0; display:block; background:#fff; width:100%}
     $("title").value = S.title;
     $("extra").value = S.extra;
     $("wpify").checked = !!S.wpify;
+    $("ovw").value = S.ovw;
     $("preset").value = S.preset;
     $("tpl").value = S.tpl;
   }
@@ -410,6 +450,15 @@ iframe{border:0; display:block; background:#fff; width:100%}
     $("code").addEventListener("input", function(){ S.code = this.value; save(); renderSoon(); });
     $("base").addEventListener("input", function(){ S.base = this.value.trim(); save(); renderSoon(); });
     $("css").addEventListener("input", function(){ S.css = this.value; save(); renderSoon(); });
+    $("ovw").addEventListener("input", function(){ var v = Number(this.value); if (v >= 800) { S.ovw = v; save(); fit(); } });
+    function applyTwo(){
+      document.body.dataset.two = S.two ? "1" : "0";
+      $("twoRow").textContent = S.two ? "1段に戻す" : "2段にする";
+      if (S.two) { ovframe.srcdoc = buildDoc(); }
+      requestAnimationFrame(fit);
+    }
+    $("twoRow").addEventListener("click", function(){ S.two = S.two ? 0 : 1; save(); applyTwo(); });
+    applyTwo();
     $("wpify").addEventListener("change", function(){ S.wpify = this.checked ? 1 : 0; save(); render(); });
     $("extra").addEventListener("input", function(){ S.extra = this.value; save(); renderSoon(); });
     $("title").addEventListener("input", function(){ S.title = this.value; save(); renderSoon(); });
@@ -470,7 +519,7 @@ iframe{border:0; display:block; background:#fff; width:100%}
       requestAnimationFrame(fit);
     });
 
-    if (window.ResizeObserver) new ResizeObserver(fit).observe(stage);
+    if (window.ResizeObserver) { var ro = new ResizeObserver(fit); ro.observe(stage); ro.observe(pp); }
     window.addEventListener("resize", fit);
     render();
   }
