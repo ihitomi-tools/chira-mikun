@@ -47,7 +47,7 @@ main{flex:1; min-height:0; display:grid; grid-template-columns:minmax(300px,38%)
 .pane{min-height:0; display:flex; flex-direction:column}
 .editor{border-right:1px solid var(--line); background:var(--panel)}
 .tabs{display:none}
-.codebar{display:flex; align-items:center; gap:10px; padding:6px 12px; border-bottom:1px solid var(--line)}
+.codebar{flex-wrap:wrap; display:flex; align-items:center; gap:10px; padding:6px 12px; border-bottom:1px solid var(--line)}
 textarea{
   font-family:"BIZ UDGothic",monospace; font-size:13px; line-height:1.55;
   color:var(--ink); background:var(--code-bg); border:0; outline:0; resize:none;
@@ -75,7 +75,11 @@ body[data-two="1"] .ovwrap{display:block}
 .cap{font-size:11.5px; color:var(--sub); padding:4px 12px; background:var(--panel); border-bottom:1px solid var(--line); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .ovwrap .cap{font-size:10.5px; padding:2px 6px 3px; border:0; cursor:grab; text-align:center; touch-action:none; user-select:none; -webkit-user-select:none}
 .ovwrap .cap.dragging{cursor:grabbing}
-body.dragging-mini iframe{pointer-events:none}
+body.dragging-mini iframe,body.dropping iframe{pointer-events:none}
+.follow{font-size:12px; color:var(--sub); display:flex; align-items:center; gap:4px}
+.follow[hidden]{display:none}
+.drophint{display:none; position:fixed; inset:0; z-index:50; align-items:center; justify-content:center; background:rgba(224,165,38,.22); border:4px dashed var(--accent); color:var(--ink); font-size:20px; font-weight:700; pointer-events:none}
+body.dropping .drophint{display:flex}
 .ovstage{padding:0; overflow:hidden}
 .kindsel{display:flex; align-items:center; gap:6px; font-size:12px; color:var(--sub)}
 .kindsel select{border:1px solid var(--line); border-radius:999px; background:transparent; color:var(--ink); font:inherit; font-size:12px; padding:5px 10px}
@@ -161,8 +165,11 @@ dialog.ckdlg::backdrop{background:rgba(0,0,0,.5)}
 <main>
   <section class="pane editor">
     <div class="codebar">
+      <button class="btn" id="openFile" title="HTMLファイルを選んで、そのままプレビューする（ここにドラッグして落としてもOK）">ファイルを開く</button>
       <button class="btn" id="repaste" title="今のコードを全部消して、コピーした内容に置き換える">貼り直し</button>
-      <span class="note" id="repasteNote">古いコードを消して、コピーした内容に丸ごと置き換えます</span>
+      <label class="follow" id="followWrap" hidden><input type="checkbox" id="follow" checked> 保存するたびに自動で更新</label>
+      <span class="note" id="repasteNote">HTMLファイルは、選ぶか、画面にドラッグして落とせます</span>
+      <input type="file" id="fileInput" accept=".html,.htm,.txt,text/html" hidden>
     </div>
     <textarea id="code" spellcheck="false" placeholder="ここにHTMLを貼る（本文だけでも、ページ全体でもOK）"></textarea>
     <details id="settings">
@@ -218,6 +225,8 @@ dialog.ckdlg::backdrop{background:rgba(0,0,0,.5)}
     </div>
   </section>
 </main>
+
+<div class="drophint" id="drophint">HTMLファイルをここに落とすと、そのままプレビューします 🐣</div>
 
 <dialog class="ckdlg" id="ckdlg" aria-labelledby="cktitle">
   <div class="ck-head"><b id="cktitle">公開前チェック 🐥</b><button class="btn" id="ckclose">閉じる</button></div>
@@ -409,6 +418,12 @@ dialog.ckdlg::backdrop{background:rgba(0,0,0,.5)}
     return m ? m[1] : "";
   }
 
+  // HTMLファイルの <head> にある <style> と、CSSの <link> も引き継ぐ（ファイルを開いたとき用）
+  function headExtras(src){
+    var m = /<head[^>]*>([\s\S]*?)<\/head>/i.exec(src);
+    if (!m) return "";
+    return (m[1].match(/<style[\s\S]*?<\/style>|<link\b[^>]*rel=["']?stylesheet[^>]*>/gi) || []).join("\n");
+  }
   function buildDoc(){
     var links = S.css.split(/\r?\n/).map(function(s){return s.trim();}).filter(Boolean).map(function(u){
       var url = bust ? u + (u.indexOf("?")>=0 ? "&" : "?") + "_=" + bust : u;
@@ -428,6 +443,7 @@ dialog.ckdlg::backdrop{background:rgba(0,0,0,.5)}
     return '<!doctype html><html lang="ja"><head><meta charset="utf-8">' +
       '<meta name="viewport" content="width=device-width">' + base + links +
       (S.extra ? '<style>' + String(S.extra).replace(/<\/style/gi, "") + '</style>' : "") +
+      headExtras(S.code) +
       '</head><body class="' + esc(bcls) + '">' + inner + '</body></html>';
   }
 
@@ -720,6 +736,70 @@ dialog.ckdlg::backdrop{background:rgba(0,0,0,.5)}
     ovcap.addEventListener("pointercancel", function(){ drag = null; ovcap.classList.remove("dragging"); document.body.classList.remove("dragging-mini"); });
     $("resetMini").addEventListener("click", function(){ S.miniPos = null; save(); fit(); });
     $("precheck").addEventListener("click", runCheck);
+    // HTMLファイルを開く／ドラッグして落とす（保存し直すたびに自動で追従できるブラウザもある）
+    var fileHandle = null, lastMod = 0, followTimer = null;
+    function decodeText(buf){
+      try { return new TextDecoder("utf-8", {fatal: true}).decode(buf); } catch(e){}
+      try { return new TextDecoder("shift_jis").decode(buf); } catch(e){}
+      return new TextDecoder().decode(buf);
+    }
+    function loadFile(file, quiet){
+      return file.arrayBuffer().then(function(buf){
+        var t = decodeText(buf);
+        lastMod = file.lastModified;
+        setCode(t); $("code").scrollTop = 0;
+        $("repasteNote").textContent = "📄 " + file.name + (fileHandle ? "" : "（自動更新は使えない開き方です。直したらもう一度開いてね）");
+        if (!quiet) hop("ファイル、読めたよ");
+      });
+    }
+    function startFollow(){
+      clearInterval(followTimer); followTimer = null;
+      $("followWrap").hidden = !fileHandle;
+      if (!fileHandle) return;
+      followTimer = setInterval(function(){
+        if (!$("follow").checked || document.hidden || !fileHandle) return;
+        fileHandle.getFile().then(function(f){
+          if (f.lastModified !== lastMod) loadFile(f, true);
+        }, function(){
+          clearInterval(followTimer); fileHandle = null; $("followWrap").hidden = true;
+          $("repasteNote").textContent = "ファイルが見つからなくなったので、自動更新を止めました";
+        });
+      }, 1200);
+    }
+    function useHandle(h){
+      fileHandle = h;
+      return h.getFile().then(function(f){ return loadFile(f); }).then(startFollow);
+    }
+    $("openFile").addEventListener("click", function(){
+      if (window.showOpenFilePicker) {
+        window.showOpenFilePicker({types: [{description: "HTMLファイル", accept: {"text/html": [".html", ".htm"], "text/plain": [".txt"]}}]})
+          .then(function(hs){ return useHandle(hs[0]); })
+          .catch(function(e){ if (!e || e.name !== "AbortError") $("fileInput").click(); });
+      } else { $("fileInput").click(); }
+    });
+    $("fileInput").addEventListener("change", function(){
+      var f = this.files && this.files[0]; this.value = "";
+      if (!f) return;
+      fileHandle = null; startFollow(); loadFile(f);
+    });
+    var dragDepth = 0;
+    function hasFiles(e){ return e.dataTransfer && Array.prototype.indexOf.call(e.dataTransfer.types || [], "Files") >= 0; }
+    document.addEventListener("dragenter", function(e){ if (!hasFiles(e)) return; e.preventDefault(); dragDepth++; document.body.classList.add("dropping"); });
+    document.addEventListener("dragover", function(e){ if (hasFiles(e)) e.preventDefault(); });
+    document.addEventListener("dragleave", function(e){ if (!hasFiles(e)) return; dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) document.body.classList.remove("dropping"); });
+    document.addEventListener("drop", function(e){
+      if (!hasFiles(e)) return;
+      e.preventDefault(); dragDepth = 0; document.body.classList.remove("dropping");
+      var file = e.dataTransfer.files && e.dataTransfer.files[0];
+      var item = e.dataTransfer.items && e.dataTransfer.items[0];
+      if (!file) return;
+      if (item && item.getAsFileSystemHandle) {
+        item.getAsFileSystemHandle().then(function(h){
+          if (h && h.kind === "file") return useHandle(h);
+          fileHandle = null; startFollow(); return loadFile(file);
+        }, function(){ fileHandle = null; startFollow(); return loadFile(file); });
+      } else { fileHandle = null; startFollow(); loadFile(file); }
+    });
     // 貼り直し：今のコードを全部消して、クリップボードの中身に置き換える
     function setCode(v){ S.code = v; $("code").value = v; save(); render(); }
     $("repaste").addEventListener("click", function(){
